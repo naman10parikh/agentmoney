@@ -1,86 +1,77 @@
-# AGENTS.md — Wiki Schema & Conventions
+# AGENTS.md — agentmoney Orchestration Conventions
 
-> This file tells the LLM how your wiki is structured.
-> You and the LLM co-evolve this over time.
+> How an AI agent (Claude Code or any coding agent) should work inside this repo.
+> agentmoney is a TypeScript/ESM Node CLI that prices LLM API calls. This file maps the
+> repo's directories, names its sub-agents, and fixes the commit grammar. Co-evolve it over time.
 
-## Domain: personal
+## What this repo is
 
-## Created: 2026-04-07
+A real-time **LLM cost calculator + monitoring CLI** for Claude, OpenAI, and Gemini APIs.
+It prices a single call (`calc`), estimates a session (`estimate`), proxies live traffic to
+extract real token usage (`proxy`), pulls real spend from the Anthropic usage API (`usage`),
+and writes daily JSON + Markdown reports to `.agentmoney/`. Pure-math pricing engine, no DB,
+zero-config, MIT-licensed. See [[MOC - agentmoney]] for the full doc map.
 
-## Directory Structure
+## Directory map (what lives where)
 
 ```
-raw/              # Immutable source documents (never modified by LLM)
-wiki/             # LLM-generated markdown (the knowledge base)
-  index.md        # Content catalog — every page listed with summary
-  log.md          # Chronological record of operations
-  sources/        # One summary page per ingested source
-  entities/       # Pages for people, organizations, tools, etc.
-  concepts/       # Pages for ideas, frameworks, patterns, etc.
-  syntheses/      # Cross-cutting analyses, comparisons, explorations
-AGENTS.md         # This file — wiki schema and conventions
-config.yaml       # Configuration (LLM provider, sources, schedules)
+src/                  # The product — Node CLI source (TypeScript, ESM)
+  index.ts            #   commander CLI entry; defines calc/estimate/models/proxy/usage/demo
+  pricing.ts          #   per-token rate tables (Claude/OpenAI/Gemini) + fuzzy model matching
+  tracker.ts          #   accumulates spend per model/provider/session
+  proxy.ts            #   Express proxy that intercepts API responses for live token usage
+  dashboard.ts        #   live local web dashboard (Chart.js) served by the proxy
+  reporter.ts         #   writes report-YYYY-MM-DD.{json,md} + calls.jsonl to .agentmoney/
+  anthropic-usage.ts  #   fetches real spend from the Anthropic /v1/usage endpoint
+  logger.ts           #   chalk-based console output helpers
+  types.ts            #   shared TS types (CallRecord, ModelPricing, etc.)
+test/                 # vitest suites (pricing.test.ts, tracker.test.ts)
+dist/                 # tsc build output (gitignored product of `npm run build`)
+.agentmoney/          # runtime report output dir (calls.jsonl, daily JSON + MD reports)
+scripts/              # inherited harness ops scripts (budget, memory, doc-health, auto-switch)
+eval/                 # eval + observer layer (seeded; see eval/README.md)
+identity/             # agent identity quad: SOUL / MEMORY / HEARTBEAT / BRAND
+memory/               # long-term memory: MEMORY.md index, LEARNINGS.md, topics/, daily/, archive/
+brain/                # Obsidian-style navigation graph (MOC + ORG_CONTEXT + ORG_MEMORY)
+.claude/              # inherited harness: rules/, skills/, hooks/, commands/, agents/
+.github/              # CI workflow (build + test)
 ```
 
-## Page Conventions
+## Sub-agents (in `.claude/agents/`)
 
-Every wiki page has YAML frontmatter:
+Use these for research/review only — the parent agent does all the writing.
 
-```yaml
----
-title: "Page Title"
-type: source | entity | concept | synthesis | index | log
-created: "YYYY-MM-DD"
-updated: "YYYY-MM-DD"
-tags: [tag1, tag2]
-sources: ["raw/filename.md"] # Which raw sources inform this page
-related: ["[[Other Page]]"] # Explicit cross-references
-summary: "One-line summary" # Used in index.md
----
-```
+| Sub-agent              | Use for                                                  |
+| ---------------------- | -------------------------------------------------------- |
+| `architect`            | design trade-offs (e.g. how to add a new provider)       |
+| `code-reviewer`        | review a diff before commit                              |
+| `test-writer`          | generate vitest cases for new pricing/tracker logic      |
+| `security-reviewer`    | audit the proxy path (it forwards real API keys)         |
+| `performance-analyzer` | check hot paths (per-call pricing, proxy throughput)     |
+| `research-agent`       | look up current model pricing from provider docs         |
+| `loop-auditor`         | audit the agent harness scaffold for quality             |
 
-## Wikilinks
+## How to work here
 
-Use `[[Page Title]]` to link between pages. The LLM maintains these links.
-Orphan pages (no inbound links) are flagged by `wikimem lint`.
+1. Read `CLAUDE.md` (operating brief) and `CONTEXT.md` (current state) first.
+2. For any change to pricing, run `npm test` — `pricing.test.ts` is the canary.
+3. Test as a user: `npx agentmoney demo` and read the cost breakdown; don't trust "it compiles".
+4. Update model rates in `src/pricing.ts` and the README pricing tables together — they must agree.
 
-## Operations
+## Commit convention
 
-### Ingest
+Conventional commits. Scope by what changed so history is grep-able and revertible:
 
-When a new source is added to raw/:
+- `feat(pricing): add DeepSeek model rates`
+- `feat(cli): add --csv export to estimate`
+- `fix(proxy): handle streaming responses without a usage block`
+- `docs:` for documentation-only changes
+- `test(tracker): cover multi-session aggregation`
+- `chore(deps):` / `ci:` for tooling
 
-1. Read the source completely
-2. Create/update a source summary page in wiki/sources/
-3. Identify entities mentioned → create/update entity pages
-4. Identify concepts discussed → create/update concept pages
-5. Update index.md with new/modified pages
-6. Append to log.md
+## Quality bar
 
-### Query
-
-When answering a question:
-
-1. Read index.md to find relevant pages
-2. Read the relevant pages
-3. Synthesize an answer with [[wikilink]] citations
-4. Optionally file the answer as a synthesis page
-
-### Lint
-
-Periodically check for:
-
-- Contradictions between pages
-- Stale claims superseded by newer sources
-- Orphan pages with no inbound links
-- Missing cross-references
-- Important concepts mentioned but lacking their own page
-- Data gaps that could be filled
-
-## Quality Standards
-
-- Every claim should cite its source via wikilink
-- Summaries should be concise (1-3 sentences in frontmatter)
-- Pages should be interconnected (no isolated islands)
-- Prefer updating existing pages over creating new ones
-- Flag contradictions explicitly rather than silently overwriting
+- TypeScript strict, no `any`, named exports only, files < 400 lines.
+- Every supported model in `pricing.ts` must also appear in the README pricing tables.
+- New commands need a row in the README command table + a vitest test.
+- Pricing is a public claim — cite the provider and the date when you update a rate.

@@ -22,10 +22,15 @@ Core surfaces (in `src/`):
 
 ## Harness components (the formula)
 
-identity/ · memory/ + brain/ · skills/ + .claude/skills · hooks/ + .claude/hooks ·
-.claude/agents (subagents) · .mcp.json (plugins/MCP) · eval/ (eval + observer).
+- `src/` — the product: Node CLI (TypeScript, ESM). Entry `src/index.ts`. See `AGENTS.md` for the dir map.
+- `test/` — vitest suites. `dist/` — tsc build output. `.agentmoney/` — runtime report output.
+- `identity/` — SOUL / MEMORY / HEARTBEAT / BRAND. `memory/` — MEMORY index + LEARNINGS + topics/daily/archive.
+- `brain/` — Obsidian navigation graph (start at `brain/MOC - agentmoney.md`).
+- `.claude/` — inherited harness: `rules/`, `skills/`, `hooks/`, `commands/`, `agents/` (sub-agents).
+- `.mcp.json` — MCP plugins. `eval/` — eval + observer layer. `scripts/` — ops scripts.
+
 Same formula as every Energy harness, different data. This is a CLI, so there is no
-src/frontend|backend|db|auth — the product lives in `src/` as a Node CLI.
+`src/frontend|backend|db|auth` — the product lives in `src/` as a Node CLI.
 
 ## Operating model
 
@@ -42,4 +47,8 @@ Inherited rules in `.claude/rules/` are glob-loaded every session.
 
 ## Commit convention
 
-feat(skill): · feat(employee): · feat(company): — so git snap-back works at all 3 granularities.
+Conventional commits, scoped by what changed (full grammar in `AGENTS.md`):
+
+- `feat(pricing):` · `feat(cli):` · `fix(proxy):` · `test(tracker):` · `docs:` · `chore(deps):` · `ci:`
+
+This keeps history grep-able and git revert/snap-back surgical.
