@@ -38,10 +38,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/naman10parikh/Energy",
-    "directory": "tools/agentmoney"
+    "url": "https://github.com/naman10parikh/agentmoney"
   },
-  "homepage": "https://github.com/naman10parikh/Energy/tree/main/tools/agentmoney#readme",
+  "homepage": "https://github.com/naman10parikh/agentmoney#readme",
+  "bugs": {
+    "url": "https://github.com/naman10parikh/agentmoney/issues"
+  },
   "author": "Energy Platform",
   "license": "MIT",
   "dependencies": {
