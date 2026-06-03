@@ -1,0 +1,15 @@
+# agentmoney
+
+> Stop guessing what AI costs you. Real-time cost monitoring for Claude, OpenAI, and Gemini APIs.
+
+## Documentation
+
+- [README.md](README.md): Stop guessing what AI costs you. Real-time cost monitoring for Claude, OpenAI, and Gemini APIs.
+- [AGENTS.md](AGENTS.md): > How an AI agent (Claude Code or any coding agent) should work inside this repo.
+- [CLAUDE.md](CLAUDE.md): > A recursively self-improving, agent-native harness built on the Energy harness formula.
+- [QUICKSTART.md](QUICKSTART.md): Know what your AI costs. A Node CLI that prices Claude / OpenAI / Gemini API calls.
+
+## Notes
+
+- This file follows the llms.txt convention (https://llmstxt.org) so AI agents can
+  discover this repo's docs without scraping. Generated from the README + key docs.
