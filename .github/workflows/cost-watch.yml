@@ -1,0 +1,58 @@
+# Cost Watch — agentmoney's own scheduled cost-observability routine (dogfood).
+# This is the Dispatch surface: a REAL multi-step run that fires on a cron schedule
+# (and on demand). Each run: builds the CLI, produces a real cost report via the
+# product itself, then ROUTES on the result — `scripts/cost-watch.mjs` reads the
+# report total and exits non-zero if it breaches the budget cap (the routing/gate
+# decision), green otherwise. agentmoney is an observability tool, so its scheduled
+# job is to watch cost and gate on a budget — it dogfoods its own promise.
+#
+# Enabled (not commented): the cron runs daily; `workflow_dispatch` lets you run it
+# now. Uses only the offline pure-math path (calc/estimate/demo) so it runs green
+# with no credentials.
+name: Cost Watch
+
+on:
+  workflow_dispatch:
+    inputs:
+      budget:
+        description: "Budget cap in USD for the gate (routing threshold)"
+        required: false
+        default: "1.00"
+  # Daily at 08:00 UTC. ENABLED — this is the scheduled run, not a placeholder.
+  schedule:
+    - cron: "0 8 * * *"
+
+jobs:
+  cost-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile || pnpm install --no-frozen-lockfile
+
+      - name: Build the CLI
+        run: pnpm build
+
+      - name: Produce a cost report (run the product on itself)
+        # `demo` runs the real tracker + reporter and writes report-YYYY-MM-DD.json
+        # to .agentmoney/ — this is agentmoney pricing a real (simulated) session.
+        run: node dist/index.js demo
+
+      - name: Self-check the knowledge index
+        # Exercises the in-code BM25 memory index so a broken corpus is caught here.
+        run: node dist/index.js memory-search "pricing cache session" --limit 3
+
+      - name: Route on the result — budget gate
+        # The routing/orchestration step: read the report total, compare to the cap,
+        # and decide pass/fail. This is the multi-step flow's decision point.
+        run: node scripts/cost-watch.mjs --budget "${{ github.event.inputs.budget || '1.00' }}"
