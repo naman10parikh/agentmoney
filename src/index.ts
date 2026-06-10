@@ -8,8 +8,19 @@ import { printDashboard, printSummary, printJson } from "./reporter.js";
 import { logCall, writeReport, writeMarkdownReport } from "./logger.js";
 import { calculateCost, detectProvider, listModels } from "./pricing.js";
 import { fetchAnthropicUsage, printUsageReport } from "./anthropic-usage.js";
+import { search as memorySearch } from "./memory-search.js";
+import { runPricingInSandbox, priceOnHost } from "./sandbox-runner.js";
+import type { SandboxCallInput } from "./sandbox-runner.js";
+import { readFileSync } from "node:fs";
 
 const program = new Command();
+
+// Commander passes (value, previous) to an option's coercion fn. Using the bare
+// `parseInt` makes the *previous/default* value the radix, so any integer option
+// with a non-zero default (e.g. --limit 5, --avg-input 2000) parses in a bogus
+// base and yields NaN. This base-10 wrapper ignores the second arg and parses
+// correctly. (Bug surfaced via `memory-search --limit`.)
+const toInt = (value: string): number => parseInt(value, 10);
 
 program
   .name("agentmoney")
@@ -144,9 +155,9 @@ program
   .command("estimate")
   .description("Estimate cost for a session (calls * avg tokens)")
   .requiredOption("-m, --model <model>", "Model name")
-  .requiredOption("-c, --calls <n>", "Number of API calls", parseInt)
-  .option("--avg-input <tokens>", "Avg input tokens per call", parseInt, 2000)
-  .option("--avg-output <tokens>", "Avg output tokens per call", parseInt, 500)
+  .requiredOption("-c, --calls <n>", "Number of API calls", toInt)
+  .option("--avg-input <tokens>", "Avg input tokens per call", toInt, 2000)
+  .option("--avg-output <tokens>", "Avg output tokens per call", toInt, 500)
   .action((opts) => {
     const perCall = calculateCost(opts.model, opts.avgInput, opts.avgOutput);
     const total = perCall.totalCost * opts.calls;
@@ -272,7 +283,7 @@ program
 program
   .command("usage")
   .description("Fetch real usage data from the Anthropic API")
-  .option("-d, --days <n>", "Number of days to fetch", parseInt, 7)
+  .option("-d, --days <n>", "Number of days to fetch", toInt, 7)
   .option("--json", "Output as JSON", false)
   .action(async (opts) => {
     const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -292,6 +303,84 @@ program
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error(chalk.red(`\n  Error: ${msg}\n`));
+      process.exit(1);
+    }
+  });
+
+// Memory search: BM25 over this repo's own knowledge corpus
+program
+  .command("memory-search")
+  .description("Search the repo's knowledge corpus (brain/, memory/, docs) with BM25")
+  .argument("<query...>", "Search terms")
+  .option("-l, --limit <n>", "Max results", toInt, 5)
+  .option("--json", "Output as JSON", false)
+  .action((queryParts: string[], opts) => {
+    const query = queryParts.join(" ");
+    const hits = memorySearch(query, process.cwd(), opts.limit);
+
+    if (opts.json) {
+      console.log(JSON.stringify({ query, hits }, null, 2));
+      return;
+    }
+
+    console.log();
+    console.log(chalk.cyan.bold(`agentmoney memory-search`) + chalk.dim(` "${query}"`));
+    console.log();
+    if (hits.length === 0) {
+      console.log(chalk.dim("  No matches in the corpus."));
+      console.log();
+      return;
+    }
+    hits.forEach((h, i) => {
+      console.log(`  ${chalk.green(`[${i + 1}]`)} ${h.path} ${chalk.dim(`(score ${h.score.toFixed(2)})`)}`);
+      if (h.snippet) console.log(chalk.dim(`      ${h.snippet}`));
+    });
+    console.log();
+  });
+
+// Sandbox run: price an untrusted call log inside an isolated E2B microVM
+program
+  .command("sandbox-run")
+  .description("Price a call log inside an isolated E2B sandbox (needs E2B_API_KEY)")
+  .option("-f, --file <path>", "JSON file with an array of API calls to price")
+  .option("--json", "Output as JSON", false)
+  .action(async (opts) => {
+    // Untrusted input: either a caller-supplied JSON file or a built-in sample.
+    let calls: SandboxCallInput[];
+    if (opts.file) {
+      calls = JSON.parse(readFileSync(opts.file, "utf8")) as SandboxCallInput[];
+    } else {
+      calls = [
+        { model: "claude-sonnet-4-6", inputTokens: 5000, outputTokens: 1000 },
+        { model: "claude-opus-4-6", inputTokens: 4000, outputTokens: 1800 },
+        { model: "gpt-4o", inputTokens: 2000, outputTokens: 600 },
+      ];
+    }
+
+    console.log();
+    console.log(chalk.cyan.bold("agentmoney sandbox-run") + chalk.dim(" (E2B isolated)"));
+    console.log(chalk.dim(`  Pricing ${calls.length} call(s) inside a Firecracker microVM...`));
+    console.log();
+
+    try {
+      const result = await runPricingInSandbox(calls);
+      const hostTotal = priceOnHost(calls);
+
+      if (opts.json) {
+        console.log(JSON.stringify({ ...result, hostTotal }, null, 2));
+        return;
+      }
+
+      console.log(`  Sandbox:    ${chalk.green(result.sandboxId)}`);
+      console.log(`  Boot:       ${result.bootMs}ms   Run: ${result.runMs}ms   Exit: ${result.exitCode}`);
+      console.log(`  In-sandbox: ${chalk.bold(`$${result.totalCost.toFixed(6)}`)}`);
+      console.log(`  Host check: $${hostTotal.toFixed(6)}`);
+      console.log();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(chalk.red(`  Error: ${msg}`));
+      console.error(chalk.dim("  (Real code path; boot needs a valid E2B_API_KEY + network.)"));
+      console.log();
       process.exit(1);
     }
   });
