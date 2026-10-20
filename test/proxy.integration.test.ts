@@ -208,6 +208,18 @@ describe("proxy integration — real round-trip", () => {
     expect(tracker.getTotalCalls()).toBe(2);
   });
 
+  it("reads an Anthropic usage block by its shape, without an x-api-key header", async () => {
+    // A gateway target and a Bearer token used to make the proxy read the block as OpenAI's and record zero tokens.
+    await httpPost(
+      `${proxyUrl}/v1/messages`,
+      { model: "claude-sonnet-4-6", max_tokens: 16, messages: [{ role: "user", content: "bearer call" }] },
+      { "x-api-key": "", authorization: "Bearer test-token" },
+    );
+
+    expect(tracker.getTotalCalls()).toBe(3);
+    expect(tracker.getCurrentSession()!.totalInputTokens).toBe(30);
+  });
+
   // Tear down after all tests finish
   afterAll(() => {
     closeProxy?.();

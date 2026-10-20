@@ -8,12 +8,13 @@
 // core action inside an E2B sandbox isolates it from the host filesystem and
 // network, so a malformed/hostile call log can never touch the operator's
 // machine. The sandbox boots in ~150ms, runs the pricing computation, and is
-// torn down.
+// torn down. The program it runs is built by sandbox-pricer.ts.
 //
 // Reference pattern: energy/packages/runtime/src/sandbox/container-runner.ts.
 
 import { Sandbox } from "@e2b/sdk";
 import { calculateCost, detectProvider } from "./pricing.js";
+import { buildSandboxPricer } from "./sandbox-pricer.js";
 
 /** One untrusted, agent-supplied API call to price inside the sandbox. */
 export interface SandboxCallInput {
@@ -43,41 +44,6 @@ export interface SandboxRunResult {
 }
 
 /**
- * The pricing program that runs INSIDE the sandbox. It is a self-contained
- * Node script: it reads the untrusted call log from /tmp/calls.json (written by
- * the host) and prints a JSON cost breakdown to stdout. Pricing rates are
- * duplicated here intentionally — the in-sandbox program must not import host
- * modules, that is the whole point of isolation.
- */
-const IN_SANDBOX_PRICER = `
-const fs = require("node:fs");
-// Minimal rate table (USD per 1M tokens). Mirrors src/pricing.ts; unknown -> Sonnet-tier.
-const RATES = {
-  "claude-opus-4-6": { in: 5, out: 25 },
-  "claude-sonnet-4-6": { in: 3, out: 15 },
-  "claude-haiku-4-5": { in: 1, out: 5 },
-  "gpt-4o": { in: 2.5, out: 10 },
-  "gemini-2.0-flash": { in: 0.1, out: 0.4 },
-};
-function rate(model) {
-  for (const k of Object.keys(RATES).sort((a, b) => b.length - a.length)) {
-    if (String(model).startsWith(k) || String(model).includes(k)) return RATES[k];
-  }
-  return { in: 3, out: 15 };
-}
-const calls = JSON.parse(fs.readFileSync("/tmp/calls.json", "utf8"));
-let total = 0;
-const out = [];
-for (const c of calls) {
-  const r = rate(c.model);
-  const cost = ((c.inputTokens || 0) / 1e6) * r.in + ((c.outputTokens || 0) / 1e6) * r.out;
-  total += cost;
-  out.push({ model: c.model, totalCost: cost });
-}
-console.log(JSON.stringify({ totalCost: total, calls: out }));
-`;
-
-/**
  * Boot an E2B sandbox, price the (untrusted) call log inside it, tear it down.
  * Requires E2B_API_KEY in the environment (loaded from this repo's .env).
  */
@@ -100,7 +66,7 @@ export async function runPricingInSandbox(
   try {
     // Write the untrusted input and the self-contained pricer INTO the sandbox.
     await sandbox.files.write("/tmp/calls.json", JSON.stringify(calls));
-    await sandbox.files.write("/tmp/pricer.cjs", IN_SANDBOX_PRICER);
+    await sandbox.files.write("/tmp/pricer.cjs", buildSandboxPricer());
 
     const runStart = Date.now();
     const res = await sandbox.commands.run("node /tmp/pricer.cjs");

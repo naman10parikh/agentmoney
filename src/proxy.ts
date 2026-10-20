@@ -123,11 +123,13 @@ export function createProxy(
       // Try to parse and record usage
       try {
         const parsed = JSON.parse(responseBody) as Record<string, unknown>;
-        const isAnthropic =
-          targetUrl.includes("anthropic") || req.headers["x-api-key"];
-        const usage = isAnthropic
-          ? parseAnthropicResponse(parsed)
-          : parseOpenAIResponse(parsed);
+        // Read the usage block by its shape, not by the target or the auth header: Anthropic reports
+        // input_tokens, OpenAI prompt_tokens. A gateway or a Bearer token then still prices correctly.
+        const block = parsed.usage as Record<string, unknown> | undefined;
+        const usage =
+          block && "input_tokens" in block
+            ? parseAnthropicResponse(parsed)
+            : parseOpenAIResponse(parsed);
 
         if (usage) {
           tracker.recordCall({

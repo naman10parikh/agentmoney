@@ -2,7 +2,7 @@
 /**
  * agentmoney MCP server — exposes a `cost_query` tool over stdio JSON-RPC.
  *
- * Compatible with the MCP 2025-11-05 specification (stdio transport).
+ * Speaks MCP protocol versions 2024-11-05 to 2025-11-25 (stdio transport).
  * No external @modelcontextprotocol/sdk dependency — implemented as plain
  * JSON-RPC 2.0 over stdin/stdout so it works without npm install.
  *
@@ -27,14 +27,14 @@ import { calculateCost, detectProvider, listModels } from "./pricing.js";
 
 interface JsonRpcRequest {
   jsonrpc: "2.0";
-  id: string | number | null;
+  id?: string | number | null;
   method: string;
   params?: Record<string, unknown>;
 }
 
 interface JsonRpcResponse {
   jsonrpc: "2.0";
-  id: string | number | null;
+  id: string | number | null | undefined;
   result?: unknown;
   error?: { code: number; message: string; data?: unknown };
 }
@@ -45,7 +45,8 @@ const COST_QUERY_TOOL = {
   name: "cost_query",
   description:
     "Calculate the USD cost of an LLM API call. " +
-    "Supports all Claude, OpenAI, and Gemini models. " +
+    "Prices the Claude, OpenAI and Gemini models agentmoney knows (`agentmoney models` lists them); " +
+    "an unknown model is estimated at $3 in and $15 out per million tokens. " +
     "Returns itemised input, output, cache, and total costs.",
   inputSchema: {
     type: "object",
@@ -80,9 +81,17 @@ const COST_QUERY_TOOL = {
 
 // ── Handlers ─────────────────────────────────────────────────────────────────
 
-function handleInitialize(): unknown {
+// MCP protocol versions this server speaks (it only serves tools, which every version has).
+const PROTOCOL_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
+
+function handleInitialize(params: Record<string, unknown>): unknown {
+  // Answer with the version the client asked for when we speak it, else our newest.
+  const requested = params["protocolVersion"];
   return {
-    protocolVersion: "2025-11-05",
+    protocolVersion:
+      typeof requested === "string" && PROTOCOL_VERSIONS.includes(requested)
+        ? requested
+        : PROTOCOL_VERSIONS[0],
     serverInfo: { name: "agentmoney", version: "1.0.0" },
     capabilities: { tools: {} },
   };
@@ -167,9 +176,9 @@ function dispatch(req: JsonRpcRequest): void {
   try {
     let result: unknown;
     if (req.method === "initialize") {
-      result = handleInitialize();
-    } else if (req.method === "notifications/initialized") {
-      // No response needed for notifications
+      result = handleInitialize((req.params ?? {}) as Record<string, unknown>);
+    } else if (req.id === undefined || req.method.startsWith("notifications/")) {
+      // A notification gets no response.
       return;
     } else if (req.method === "tools/list") {
       result = handleToolsList();

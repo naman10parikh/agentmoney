@@ -1,110 +1,135 @@
 import chalk from "chalk";
-import { calculateCost, detectProvider } from "./pricing.js";
+import { calculateCost } from "./pricing.js";
 
-interface AnthropicUsageEntry {
-  date: string;
-  model: string;
-  usage_type: string;
-  input_tokens: number;
-  output_tokens: number;
-  cache_read_tokens: number;
-  cache_write_tokens: number;
-  api_calls: number;
+// The Anthropic Usage API: GET /v1/organizations/usage_report/messages, read with an Admin API key.
+// Docs: https://platform.claude.com/docs/en/api/beta/organization/usage_report/retrieve_messages
+interface UsageReportRow {
+  model: string | null;
+  uncached_input_tokens?: number;
+  cache_creation?: {
+    ephemeral_5m_input_tokens?: number;
+    ephemeral_1h_input_tokens?: number;
+  };
+  cache_read_input_tokens?: number;
+  output_tokens?: number;
 }
 
-interface UsageSummary {
+interface UsageReportPage {
+  data?: Array<{ starting_at: string; ending_at: string; results?: UsageReportRow[] }>;
+  has_more?: boolean;
+  next_page?: string | null;
+}
+
+export interface UsageSummary {
   date: string;
   totalCost: number;
-  totalCalls: number;
   totalInputTokens: number;
   totalOutputTokens: number;
-  byModel: Record<string, { calls: number; cost: number; tokens: number }>;
+  totalCacheReadTokens: number;
+  totalCacheWriteTokens: number;
+  byModel: Record<string, { cost: number; tokens: number }>;
 }
 
+const DAY_MS = 86_400_000;
+
+/** The key the Usage API accepts: an Admin API key (sk-ant-admin...). Workspace API keys cannot read usage. */
+export function adminKeyFromEnv(env: NodeJS.ProcessEnv = process.env): string | undefined {
+  if (env.ANTHROPIC_ADMIN_KEY) return env.ANTHROPIC_ADMIN_KEY;
+  // Older setups put the admin key in ANTHROPIC_API_KEY; send it only when it is an admin key.
+  const legacy = env.ANTHROPIC_API_KEY;
+  return legacy?.startsWith("sk-ant-admin") ? legacy : undefined;
+}
+
+function priceRow(summary: UsageSummary, row: UsageReportRow): void {
+  const model = row.model ?? "unknown";
+  const input = row.uncached_input_tokens ?? 0;
+  const output = row.output_tokens ?? 0;
+  const cacheRead = row.cache_read_input_tokens ?? 0;
+  const write5m = row.cache_creation?.ephemeral_5m_input_tokens ?? 0;
+  const write1h = row.cache_creation?.ephemeral_1h_input_tokens ?? 0;
+  // The engine's cache-write rate is the five-minute one; a one-hour cache write costs twice the input rate.
+  const cost =
+    calculateCost(model, input, output, cacheRead, write5m).totalCost +
+    calculateCost(model, write1h * 2, 0).inputCost;
+  const tokens = input + output + cacheRead + write5m + write1h;
+
+  summary.totalCost += cost;
+  summary.totalInputTokens += input;
+  summary.totalOutputTokens += output;
+  summary.totalCacheReadTokens += cacheRead;
+  summary.totalCacheWriteTokens += write5m + write1h;
+  const entry = summary.byModel[model] ?? { cost: 0, tokens: 0 };
+  entry.cost += cost;
+  entry.tokens += tokens;
+  summary.byModel[model] = entry;
+}
+
+/**
+ * Daily token usage per model for the last `days` days (today included), priced with the same engine as `calc`.
+ * Set ANTHROPIC_BASE_URL to read from another host (the evals use a stand-in).
+ */
 export async function fetchAnthropicUsage(
-  apiKey: string,
+  adminKey: string,
   days: number,
 ): Promise<UsageSummary[]> {
-  const endDate = new Date();
-  const startDate = new Date();
-  startDate.setDate(startDate.getDate() - days);
+  const base = (process.env.ANTHROPIC_BASE_URL || "https://api.anthropic.com").replace(/\/+$/, "");
+  const today = Date.parse(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+  const startingAt = new Date(today - (days - 1) * DAY_MS).toISOString();
+  const endingAt = new Date(today + DAY_MS).toISOString(); // a bucket is returned when it ends by this time
 
-  const start = startDate.toISOString().slice(0, 10);
-  const end = endDate.toISOString().slice(0, 10);
+  const byDate = new Map<string, UsageSummary>();
+  let page: string | null | undefined = null;
+  do {
+    const query =
+      `starting_at=${encodeURIComponent(startingAt)}&ending_at=${encodeURIComponent(endingAt)}` +
+      `&bucket_width=1d&limit=31&group_by[]=model` +
+      (page ? `&page=${encodeURIComponent(page)}` : "");
+    const response = await fetch(`${base}/v1/organizations/usage_report/messages?${query}`, {
+      headers: {
+        "x-api-key": adminKey,
+        "anthropic-version": "2023-06-01",
+        "user-agent": "agentmoney/1.0.0 (https://github.com/naman10parikh/agentmoney)",
+      },
+    });
 
-  const url = `https://api.anthropic.com/v1/usage?start_date=${start}&end_date=${end}`;
-
-  const response = await fetch(url, {
-    headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-  });
-
-  if (!response.ok) {
-    if (response.status === 401) {
-      throw new Error("Invalid API key. Check your ANTHROPIC_API_KEY.");
-    }
-    if (response.status === 403) {
-      throw new Error(
-        "API key lacks usage permissions. The /v1/usage endpoint requires admin-level API keys. " +
-          "Workspace member keys may not have access. Check console.anthropic.com/settings/keys.",
-      );
-    }
-    throw new Error(
-      `Anthropic API returned ${response.status}: ${await response.text()}`,
-    );
-  }
-
-  const data = (await response.json()) as { data: AnthropicUsageEntry[] };
-
-  // Group by date
-  const byDate = new Map<string, AnthropicUsageEntry[]>();
-  for (const entry of data.data ?? []) {
-    const existing = byDate.get(entry.date) ?? [];
-    existing.push(entry);
-    byDate.set(entry.date, existing);
-  }
-
-  const summaries: UsageSummary[] = [];
-
-  for (const [date, entries] of byDate) {
-    const summary: UsageSummary = {
-      date,
-      totalCost: 0,
-      totalCalls: 0,
-      totalInputTokens: 0,
-      totalOutputTokens: 0,
-      byModel: {},
-    };
-
-    for (const entry of entries) {
-      const costs = calculateCost(
-        entry.model,
-        entry.input_tokens,
-        entry.output_tokens,
-        entry.cache_read_tokens,
-        entry.cache_write_tokens,
-      );
-
-      summary.totalCost += costs.totalCost;
-      summary.totalCalls += entry.api_calls;
-      summary.totalInputTokens += entry.input_tokens;
-      summary.totalOutputTokens += entry.output_tokens;
-
-      if (!summary.byModel[entry.model]) {
-        summary.byModel[entry.model] = { calls: 0, cost: 0, tokens: 0 };
+    if (!response.ok) {
+      if (response.status === 401) {
+        throw new Error("The Usage API rejected the key (401). Check ANTHROPIC_ADMIN_KEY.");
       }
-      summary.byModel[entry.model].calls += entry.api_calls;
-      summary.byModel[entry.model].cost += costs.totalCost;
-      summary.byModel[entry.model].tokens +=
-        entry.input_tokens + entry.output_tokens;
+      if (response.status === 403) {
+        throw new Error(
+          "This key cannot read usage (403). The Usage API needs an Admin API key (sk-ant-admin...); " +
+            "workspace API keys do not work.",
+        );
+      }
+      throw new Error(`Anthropic API returned ${response.status}: ${await response.text()}`);
     }
 
-    summaries.push(summary);
-  }
+    const body = (await response.json()) as UsageReportPage;
+    for (const bucket of body.data ?? []) {
+      const rows = bucket.results ?? [];
+      if (rows.length === 0) continue;
+      const date = bucket.starting_at.slice(0, 10);
+      const summary = byDate.get(date) ?? {
+        date,
+        totalCost: 0,
+        totalInputTokens: 0,
+        totalOutputTokens: 0,
+        totalCacheReadTokens: 0,
+        totalCacheWriteTokens: 0,
+        byModel: {},
+      };
+      for (const row of rows) priceRow(summary, row);
+      byDate.set(date, summary);
+    }
+    page = body.has_more ? body.next_page : null;
+  } while (page);
 
-  return summaries.sort((a, b) => a.date.localeCompare(b.date));
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function totalTokens(s: UsageSummary): number {
+  return s.totalInputTokens + s.totalOutputTokens + s.totalCacheReadTokens + s.totalCacheWriteTokens;
 }
 
 export function printUsageReport(summaries: UsageSummary[]): void {
@@ -114,7 +139,7 @@ export function printUsageReport(summaries: UsageSummary[]): void {
   }
 
   const grandTotal = summaries.reduce((sum, s) => sum + s.totalCost, 0);
-  const grandCalls = summaries.reduce((sum, s) => sum + s.totalCalls, 0);
+  const grandTokens = summaries.reduce((sum, s) => sum + totalTokens(s), 0);
 
   console.log();
   console.log(
@@ -123,22 +148,18 @@ export function printUsageReport(summaries: UsageSummary[]): void {
   console.log(chalk.dim("─".repeat(60)));
   console.log();
   console.log(
-    `  Period:      ${summaries[0].date} → ${summaries[summaries.length - 1].date}`,
+    `  Period:       ${summaries[0].date} → ${summaries[summaries.length - 1].date}`,
   );
-  console.log(`  Total cost:  ${chalk.bold(`$${grandTotal.toFixed(4)}`)}`);
-  console.log(`  Total calls: ${grandCalls.toLocaleString()}`);
+  console.log(`  Total cost:   ${chalk.bold(`$${grandTotal.toFixed(4)}`)}`);
+  console.log(`  Total tokens: ${grandTokens.toLocaleString()}`);
   console.log();
 
   // Daily breakdown
   console.log(
-    chalk.dim(
-      `  ${"Date".padEnd(12)} ${"Calls".padStart(8)} ${"Cost".padStart(12)} ${"Tokens".padStart(12)}`,
-    ),
+    chalk.dim(`  ${"Date".padEnd(12)} ${"Cost".padStart(12)} ${"Tokens".padStart(14)}`),
   );
   console.log(
-    chalk.dim(
-      `  ${"─".repeat(12)} ${"─".repeat(8)} ${"─".repeat(12)} ${"─".repeat(12)}`,
-    ),
+    chalk.dim(`  ${"─".repeat(12)} ${"─".repeat(12)} ${"─".repeat(14)}`),
   );
 
   for (const day of summaries) {
@@ -148,24 +169,18 @@ export function printUsageReport(summaries: UsageSummary[]): void {
         : day.totalCost > 1
           ? chalk.yellow
           : chalk.white;
-    const tokens = day.totalInputTokens + day.totalOutputTokens;
     console.log(
-      `  ${day.date.padEnd(12)} ${String(day.totalCalls).padStart(8)} ${costColor(`$${day.totalCost.toFixed(4)}`.padStart(12))} ${tokens.toLocaleString().padStart(12)}`,
+      `  ${day.date.padEnd(12)} ${costColor(`$${day.totalCost.toFixed(4)}`.padStart(12))} ${totalTokens(day).toLocaleString().padStart(14)}`,
     );
   }
 
   console.log();
 
   // Model breakdown (aggregated)
-  const allModels: Record<
-    string,
-    { calls: number; cost: number; tokens: number }
-  > = {};
+  const allModels: Record<string, { cost: number; tokens: number }> = {};
   for (const day of summaries) {
     for (const [model, stats] of Object.entries(day.byModel)) {
-      if (!allModels[model])
-        allModels[model] = { calls: 0, cost: 0, tokens: 0 };
-      allModels[model].calls += stats.calls;
+      if (!allModels[model]) allModels[model] = { cost: 0, tokens: 0 };
       allModels[model].cost += stats.cost;
       allModels[model].tokens += stats.tokens;
     }
@@ -177,7 +192,7 @@ export function printUsageReport(summaries: UsageSummary[]): void {
   );
   for (const [model, stats] of sorted) {
     console.log(
-      `    ${model.padEnd(32)} $${stats.cost.toFixed(4).padStart(10)}  (${stats.calls} calls)`,
+      `    ${model.padEnd(32)} $${stats.cost.toFixed(4).padStart(10)}  (${stats.tokens.toLocaleString()} tokens)`,
     );
   }
 

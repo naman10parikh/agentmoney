@@ -7,9 +7,8 @@ import { createProxy } from "./proxy.js";
 import { printDashboard, printSummary, printJson } from "./reporter.js";
 import { logCall, writeReport, writeMarkdownReport } from "./logger.js";
 import { calculateCost, detectProvider, listModels } from "./pricing.js";
-import { fetchAnthropicUsage, printUsageReport } from "./anthropic-usage.js";
+import { adminKeyFromEnv, fetchAnthropicUsage, printUsageReport } from "./anthropic-usage.js";
 import { search as memorySearch } from "./memory-search.js";
-import { runPricingInSandbox, priceOnHost } from "./sandbox-runner.js";
 import type { SandboxCallInput } from "./sandbox-runner.js";
 import { readFileSync } from "node:fs";
 
@@ -282,13 +281,21 @@ program
 // Fetch actual usage from Anthropic API
 program
   .command("usage")
-  .description("Fetch real usage data from the Anthropic API")
+  .description("Fetch real usage from the Anthropic Usage API (needs an Admin API key in ANTHROPIC_ADMIN_KEY)")
   .option("-d, --days <n>", "Number of days to fetch", toInt, 7)
   .option("--json", "Output as JSON", false)
   .action(async (opts) => {
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = adminKeyFromEnv();
     if (!apiKey) {
-      console.error(chalk.red("\n  Error: ANTHROPIC_API_KEY is not set.\n"));
+      console.error(
+        chalk.red(
+          "\n  Error: ANTHROPIC_ADMIN_KEY is not set. The Usage API needs an Admin API key (sk-ant-admin...).\n",
+        ),
+      );
+      process.exit(1);
+    }
+    if (!Number.isInteger(opts.days) || opts.days < 1) {
+      console.error(chalk.red("\n  Error: --days must be a whole number of 1 or more.\n"));
       process.exit(1);
     }
 
@@ -357,12 +364,16 @@ program
       ];
     }
 
-    console.log();
-    console.log(chalk.cyan.bold("agentmoney sandbox-run") + chalk.dim(" (E2B isolated)"));
-    console.log(chalk.dim(`  Pricing ${calls.length} call(s) inside a Firecracker microVM...`));
-    console.log();
+    if (!opts.json) {
+      console.log();
+      console.log(chalk.cyan.bold("agentmoney sandbox-run") + chalk.dim(" (E2B isolated)"));
+      console.log(chalk.dim(`  Pricing ${calls.length} call(s) inside a Firecracker microVM...`));
+      console.log();
+    }
 
     try {
+      // Loaded only here: the E2B SDK needs Node 20 or newer, and every other command runs on Node 18.
+      const { runPricingInSandbox, priceOnHost } = await import("./sandbox-runner.js");
       const result = await runPricingInSandbox(calls);
       const hostTotal = priceOnHost(calls);
 

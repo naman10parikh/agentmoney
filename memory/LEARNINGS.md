@@ -19,3 +19,37 @@ Every error → root cause → rule. Auto-compressed when >500 lines (memory-com
 - **What:** `src/proxy.ts` forwards real requests (and credentials) to the provider.
 - **Root cause:** It is the one surface with access to secrets and live traffic.
 - **Rule:** Route any proxy change through the `security-reviewer` sub-agent; never log request bodies or auth headers.
+
+## 2026-10-19 — The usage command called an endpoint that does not exist
+
+- **What broke:** `agentmoney usage` called `GET /v1/usage`, which answers 404 Not found (the same as any unknown
+  path), so the command could never work, and the README promised it did.
+- **Root cause:** the endpoint was written from memory and never run against the real API; no test covered it.
+- **Rule:** the Usage API is `GET /v1/organizations/usage_report/messages` with an Admin API key
+  (`ANTHROPIC_ADMIN_KEY`). Check a new endpoint with a keyless request first (a real path answers 401, a wrong one
+  404), and test the call against a stand-in in the documented shape (`eval/stub-usage.mjs`).
+
+## 2026-10-19 — The sandbox priced with a copy of five rates
+
+- **What broke:** `sandbox-run` priced inside the microVM with a hand-copied table of 5 models and no cache rates, so
+  its total disagreed with the host check for most real call logs.
+- **Root cause:** the in-sandbox program duplicated the rate table instead of being generated from it.
+- **Rule:** the sandbox program is built from `src/pricing.ts` (`src/sandbox-pricer.ts`); `test/sandbox-pricer.test.ts`
+  runs it locally and checks it against the host engine for every model.
+
+## 2026-10-19 — The MCP server answered a protocol version that does not exist
+
+- **What broke:** `initialize` answered `protocolVersion: "2025-11-05"`, which is not an MCP version, and the server
+  replied to notifications other than `notifications/initialized`.
+- **Root cause:** the version was typed by hand and never compared with what clients send.
+- **Rule:** answer the version the client asked for when the server speaks it (2024-11-05 to 2025-11-25), else the
+  newest; never answer a notification. The golden eval checks both.
+
+## 2026-10-19 — The proxy chose the usage parser by the target and the auth header
+
+- **What broke:** through a target without "anthropic" in its address and without an `x-api-key` header (a gateway,
+  or a Bearer token), the proxy read Anthropic's usage block as OpenAI's and recorded every call at 0 tokens and $0.
+- **Root cause:** the parser was picked by `targetUrl.includes("anthropic") || x-api-key`, not by the response.
+- **Rule:** read the usage block by its shape (`input_tokens` is Anthropic's, `prompt_tokens` OpenAI's).
+  `test/proxy.integration.test.ts` covers a Bearer call; run the CLI proxy once by hand after any change to it.
+
