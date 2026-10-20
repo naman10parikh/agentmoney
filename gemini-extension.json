@@ -1,0 +1,17 @@
+{
+  "name": "agentmoney",
+  "version": "1.0.0",
+  "description": "Know what your AI costs: pricing and spend for Claude, GPT and Gemini.",
+  "contextFileName": "GEMINI.md",
+  "mcpServers": {
+    "agentmoney": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "github:naman10parikh/agentmoney",
+        "agentmoney-mcp"
+      ]
+    }
+  }
+}

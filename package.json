@@ -6,21 +6,31 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "agentmoney": "dist/index.js"
+    "agentmoney": "dist/index.js",
+    "agentmoney-mcp": "dist/mcp-server.js"
   },
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "skills",
+    "hooks",
+    "identity",
+    "AGENTS.md",
+    "llms.txt",
+    "memory/MEMORY.md",
+    "memory/LEARNINGS.md"
   ],
   "scripts": {
     "build": "tsc",
+    "prepare": "tsc",
     "dev": "tsx src/index.ts",
     "start": "tsx src/index.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "lint": "tsc --noEmit",
-    "prepublishOnly": "npm run lint && npm run build && npm run test"
+    "prepublishOnly": "npm run lint && npm run build && npm run test",
+    "eval": "bash eval/run.sh"
   },
   "keywords": [
     "ai-agent",
@@ -34,7 +44,12 @@
     "anthropic",
     "token-usage",
     "proxy",
-    "dashboard"
+    "dashboard",
+    "agent-native",
+    "mcp",
+    "agent-skills",
+    "self-improving",
+    "observability"
   ],
   "repository": {
     "type": "git",

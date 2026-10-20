@@ -16,9 +16,10 @@ encoding it stops every cost post-mortem from being improvised.
 
 ## Steps
 
-1. **Get ground truth from the provider.** Run `node dist/index.js usage --days 30 --json`
-   to pull real spend from the Anthropic usage API. This is the number the bill is
-   based on — start from reality, not from estimates.
+1. **Get ground truth from the provider.** With an Admin API key in `ANTHROPIC_ADMIN_KEY`,
+   run `node dist/index.js usage --days 30 --json` to read the tokens the Anthropic Usage API
+   recorded, priced with agentmoney's rates. Start from these numbers, not from estimates; without
+   an admin key, say so and work from the proxy logs.
 2. **Attribute via the proxy logs.** Read `.agentmoney/calls.jsonl` and the daily
    `report-YYYY-MM-DD.{json,md}` files. Group spend by model and by session to find
    the single biggest contributor. If no proxy data exists, tell the user to route

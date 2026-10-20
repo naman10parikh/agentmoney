@@ -1,0 +1,34 @@
+{
+  "dsip": "0.1",
+  "product": "agentmoney",
+  "description": "How agentmoney (Ledger) improves itself. Level by the fleet walkthrough: L2. L1, the evals (eval/run.sh) gate every push and pull request in CI (.github/workflows/ci.yml). L2, a nightly loop (.github/workflows/improve.yml running scripts/improve.mjs) runs the evals, measures the live CLI and MCP surface against the docs, skills and memory, checks that the rate table is fresh and fully listed in the README, and writes a proposal. A daily Cost Watch run (.github/workflows/cost-watch.yml) prices a session with the product and gates on a budget. Nothing merges by itself and no paid API is called: the Usage API eval uses a stand-in. Not L3: the loop does not yet change its own checks.",
+  "levels": [
+    "agent"
+  ],
+  "loop": {
+    "cadence": "nightly",
+    "steps": [
+      "run-evals",
+      "review",
+      "extract",
+      "propose",
+      "validate",
+      "ship"
+    ]
+  },
+  "selection": "performance",
+  "eval": {
+    "rubric": "eval/run.sh: L1 eval/surfaces.py (surfaces, and every priced model in the README), L2 eval/golden.sh (the CLI, MCP server and hook offline, pass^3)",
+    "gate": "every eval passes && no test fails && golden time within 1.5x of eval/baseline.json"
+  },
+  "snapback": {
+    "granularity": [
+      "skill",
+      "employee"
+    ],
+    "vcs": "git"
+  },
+  "externalIntelligence": {
+    "enabled": false
+  }
+}

@@ -14,4 +14,4 @@ Warm black (#141312) background · Emerald (#10b981) for spend-under-budget · A
 
 ## Landing Copy
 
-Ledger is the receipt your AI agents never gave you. Drop it in as a proxy or point it at your Anthropic console and watch your token spend accumulate in real time — broken down by model, agent, and run. Know your burn rate before the weekly limit hits.
+Ledger is the receipt your AI agents never gave you. Drop it in as a proxy or point it at the Anthropic Usage API and watch your token spend accumulate in real time, broken down by model and session. Know your burn rate before the bill arrives.

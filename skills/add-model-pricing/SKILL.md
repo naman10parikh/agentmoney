@@ -32,13 +32,16 @@ Quality bar).
 4. **Add a vitest case in `test/pricing.test.ts`.** Assert `calculateCost("<new-model>", N, M)`
    returns the hand-computed USD within `0.001`. This is the canary that catches a
    future typo in the rate.
-5. **Verify the fuzzy fallback still holds.** Confirm an unknown variant of the new
+5. **Nothing else to copy.** The sandbox program (`src/sandbox-pricer.ts`) is generated from the
+   rate table, so it picks up the new rate by itself; `eval/surfaces.py` fails if the README row is missing.
+6. **Verify the fuzzy fallback still holds.** Confirm an unknown variant of the new
    model (e.g. with a date suffix) still resolves, and that genuinely-unknown models
    still fall back to Sonnet-tier ($3/$15) rather than throwing.
 
 ## Verify
 
-- `./node_modules/.bin/vitest run test/pricing.test.ts` → all pass (new case green).
+- `./node_modules/.bin/vitest run test/pricing.test.ts test/sandbox-pricer.test.ts` → all pass (new case green).
+- `pnpm eval` → the surfaces check finds the new model in the README.
 - `node dist/index.js calc -m <new-model> -i 5000 -o 1000` → prints the expected cost.
 - `node dist/index.js models | grep <new-model>` → the model is listed.
 - `grep -c "<new-model>" README.md src/pricing.ts` → appears in BOTH.

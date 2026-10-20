@@ -27,21 +27,20 @@ on the host.
    session (your own `demo` / proxy output), price it on the host with `agentmoney calc`
    or `agentmoney estimate` — no sandbox needed. Use the sandbox **only** when the input
    is foreign (a supplied file, a captured body, a fleet export).
-2. **Confirm the sandbox credential.** `agentmoney sandbox-run` needs `E2B_API_KEY` in
-   `.env` (this repo already carries one for OSS dogfooding; get one at
-   https://e2b.dev/dashboard otherwise). Without it the command fails fast with a clear
-   message rather than silently falling back to the host.
+2. **Confirm the sandbox credential.** `agentmoney sandbox-run` needs `E2B_API_KEY` in the
+   environment (get one at https://e2b.dev/dashboard). Without it the command fails fast with
+   a clear message rather than silently falling back to the host.
 3. **Run the untrusted log in isolation.**
    `node dist/index.js sandbox-run --file <untrusted.json> --json`
    This boots an E2B microVM, writes the untrusted call log to `/tmp/calls.json` *inside*
-   the sandbox, runs the self-contained pricer (`IN_SANDBOX_PRICER`, which imports no host
-   modules), captures the JSON cost breakdown, and tears the sandbox down. The host
+   the sandbox, runs the self-contained pricer (built by `src/sandbox-pricer.ts` from the host
+   rate table; it imports nothing), captures the JSON cost breakdown, and tears the sandbox down. The host
    filesystem and network are never exposed to the input.
 4. **Cross-check against the host engine.** The command also prints `hostTotal` — the
    same calls priced by `src/pricing.ts` on the host using only the (already-validated)
-   numeric token counts. Sandbox total and host total should reconcile within rounding;
-   a large divergence means the untrusted log carried unexpected model ids or fields —
-   investigate before trusting the number.
+   numeric token counts. The sandbox program uses the same rates and name matching, so the
+   two totals agree to rounding for any well-formed log; a divergence means the log carried
+   fields that are not numbers (the sandbox counts them as 0). Investigate before trusting it.
 5. **Report boot/run telemetry.** Surface `bootMs`, `runMs`, `exitCode`, and `sandboxId`
    so the isolation is auditable (it really booted; it really exited 0).
 

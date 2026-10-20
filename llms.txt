@@ -1,15 +1,36 @@
 # agentmoney
 
-> Stop guessing what AI costs you. Real-time cost monitoring for Claude, OpenAI, and Gemini APIs.
+> Know what your AI costs: pricing and spend for Claude, GPT and Gemini. A CLI, an MCP server, three skills and a
+> local proxy that price every call from a cited rate table and report where the money went.
 
-## Documentation
+## Start here
 
-- [README.md](README.md): Stop guessing what AI costs you. Real-time cost monitoring for Claude, OpenAI, and Gemini APIs.
-- [AGENTS.md](AGENTS.md): > How an AI agent (Claude Code or any coding agent) should work inside this repo.
-- [CLAUDE.md](CLAUDE.md): > A recursively self-improving, agent-native harness built on the Energy harness formula.
-- [QUICKSTART.md](QUICKSTART.md): Know what your AI costs. A Node CLI that prices Claude / OpenAI / Gemini API calls.
+- [AGENTS.md](AGENTS.md): what it does, every command and tool, how it prices, and what not to do
+- [README.md](README.md): install, quick start, the pricing tables and the proxy
+- [identity/SOUL.md](identity/SOUL.md): Ledger, the agent employee behind it, and its boundaries
 
-## Notes
+## Tools
 
-- This file follows the llms.txt convention (https://llmstxt.org) so AI agents can
-  discover this repo's docs without scraping. Generated from the README + key docs.
+- [src/index.ts](src/index.ts): the `agentmoney` CLI (calc, estimate, models, proxy, usage, demo, sandbox-run, memory-search)
+- [src/mcp-server.ts](src/mcp-server.ts): the `agentmoney-mcp` server and its one tool, `cost_query`
+- [src/pricing.ts](src/pricing.ts): the rate table and fuzzy model matching
+
+## Skills
+
+- [skills/cost-investigation/SKILL.md](skills/cost-investigation/SKILL.md): explain a bill by model, session and cache savings
+- [skills/add-model-pricing/SKILL.md](skills/add-model-pricing/SKILL.md): add or change a rate in the table, the README and a test
+- [skills/isolate-untrusted-pricing/SKILL.md](skills/isolate-untrusted-pricing/SKILL.md): price a call log you did not write inside an E2B sandbox
+
+## Sub-agents and hooks
+
+- [.claude/agents/cost-analyst.md](.claude/agents/cost-analyst.md): explains where spend went
+- [.claude/agents/pricing-curator.md](.claude/agents/pricing-curator.md): checks rates against the providers and proposes edits
+- [hooks/hooks.json](hooks/hooks.json): the SessionStart hook that sums a project's call log
+
+## Self-improvement
+
+- [dsip.json](dsip.json): the self-improvement contract (level L2)
+- [eval/README.md](eval/README.md): the evals that gate every change
+- [scripts/improve.mjs](scripts/improve.mjs): the nightly loop that writes proposals
+- [memory/MEMORY.md](memory/MEMORY.md): long-term memory index
+- [memory/LEARNINGS.md](memory/LEARNINGS.md): every correction, turned into a rule

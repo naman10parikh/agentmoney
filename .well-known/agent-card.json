@@ -1,0 +1,36 @@
+{
+  "name": "Ledger",
+  "description": "Know what your AI costs: pricing and spend for Claude, GPT and Gemini.",
+  "url": "https://github.com/naman10parikh/agentmoney",
+  "version": "1.0.0",
+  "provider": {
+    "organization": "Naman Parikh",
+    "url": "https://github.com/naman10parikh"
+  },
+  "capabilities": {
+    "streaming": false
+  },
+  "defaultInputModes": [
+    "text/plain"
+  ],
+  "defaultOutputModes": [
+    "text/plain"
+  ],
+  "skills": [
+    {
+      "id": "cost-investigation",
+      "name": "cost-investigation",
+      "description": "Explain a bill: which model and session drove it, and what caching saved."
+    },
+    {
+      "id": "add-model-pricing",
+      "name": "add-model-pricing",
+      "description": "Add or change a model's rate in the table, the README and a test, with its source."
+    },
+    {
+      "id": "isolate-untrusted-pricing",
+      "name": "isolate-untrusted-pricing",
+      "description": "Price a call log you did not write inside an E2B sandbox, checked against the host."
+    }
+  ]
+}

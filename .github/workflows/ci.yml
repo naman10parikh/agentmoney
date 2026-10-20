@@ -30,3 +30,6 @@ jobs:
 
       - name: Test
         run: pnpm test
+
+      - name: Eval (surfaces, then the whole CLI, MCP server and hook offline, pass^3)
+        run: pnpm eval
