@@ -54,7 +54,7 @@ Every error → root cause → rule. Auto-compressed when >500 lines (memory-com
   `test/proxy.integration.test.ts` covers a Bearer call; run the CLI proxy once by hand after any change to it.
 
 
-## 2026-10-20 — Streamed replies were never priced
+## 2026-10-20: Streamed replies were never priced
 
 - **What broke:** a reply sent as server-sent events failed `JSON.parse`, so the proxy recorded nothing for it. Every
   streamed call cost $0 in the totals, the reports and the dashboard.
