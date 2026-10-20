@@ -1,235 +1,334 @@
 # agentmoney
 
-[![npm version](https://img.shields.io/npm/v/agentmoney)](https://www.npmjs.com/package/agentmoney)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
-[![Node.js](https://img.shields.io/badge/node-%3E%3D18-brightgreen)](https://nodejs.org/)
+<!-- fleet:header:start -->
+[![CI](https://img.shields.io/github/actions/workflow/status/naman10parikh/agentmoney/ci.yml?branch=main&style=flat-square&label=ci)](https://github.com/naman10parikh/agentmoney/actions) [![License: MIT](https://img.shields.io/badge/license-MIT-green?style=flat-square)](LICENSE) [![Agent-native](https://img.shields.io/badge/agent--native-yes-2f5d8a?style=flat-square)](AGENTS.md) [![MCP server](https://img.shields.io/badge/MCP-server-1e3f60?style=flat-square)](#use-it-from-any-coding-agent) [![Skills](https://img.shields.io/badge/skills-3-2f6b4f?style=flat-square)](skills/) [![Stars](https://img.shields.io/github/stars/naman10parikh/agentmoney?style=flat-square)](https://github.com/naman10parikh/agentmoney/stargazers)
 
-**Stop guessing what AI costs you.** Real-time cost monitoring for Claude, OpenAI, and Gemini APIs.
+**Know what your AI costs: pricing and spend for Claude, GPT and Gemini.**
 
-You run Claude Code overnight. You wake up. Your API bill is $247. You have no idea which session burned it, which model was used, or whether prompt caching saved you anything.
+AgentMoney is an agent employee, a packaged specialist agent with its own skills, memory and tests. It owns one job: observability. Its persona is Ledger. Coding agents use it through its skills, its MCP server and its command line. A scheduled job runs its evals and proposes fixes. A person makes every change.
 
-agentmoney shows you exactly where every dollar goes.
+_AgentMoney is part of an agent-native play for agent-native systems that can eventually be recursively self-improving and evolving, operated by agent employees._
 
-## Install
+[AGENTS.md](AGENTS.md) · [llms.txt](llms.txt) · [Skills](skills/) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [All projects](https://github.com/naman10parikh)
+<!-- fleet:header:end -->
 
-```bash
-npm install -g agentmoney
+agentmoney tells you what your AI costs. It prices one call, a session, or every call your app makes, from a cited
+rate table of 28 Claude, OpenAI and Gemini models, and it reads the Anthropic Usage API for what you actually spent.
+It is for anyone who runs agents or LLM apps: you run Claude Code overnight, the bill is $247, and you want to know
+which session burned it, which model, and whether prompt caching saved anything.
+
+<!-- fleet:use:start -->
+## Use it from any coding agent
+
+**Claude Code**: the plugin brings the skills, sub-agents, hooks and MCP server.
+
+```
+/plugin marketplace add naman10parikh/agentmoney
+/plugin install agentmoney@agentmoney
 ```
 
-Or run directly:
+<details><summary>Its MCP server, Codex, Cursor, Gemini CLI, one skill and the command line</summary>
+
+**Its MCP server**, in any MCP client:
 
 ```bash
-npx agentmoney demo
+claude mcp add --transport stdio agentmoney -- npx -y -p github:naman10parikh/agentmoney agentmoney-mcp
+codex mcp add agentmoney -- npx -y -p github:naman10parikh/agentmoney agentmoney-mcp
 ```
 
-## Quick Start
+Cursor (`.cursor/mcp.json`), Gemini CLI (`.gemini/settings.json`) and most other clients take the same command as JSON:
 
-### Calculate a single API call cost
-
-```bash
-# How much does a Sonnet call with 5K input / 1K output cost?
-agentmoney calc -m claude-sonnet-4-6 -i 5000 -o 1000
-
-# With prompt caching
-agentmoney calc -m claude-sonnet-4-6 -i 5000 -o 1000 --cache-read 3000
+```json
+{
+  "mcpServers": {
+    "agentmoney": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "-p",
+        "github:naman10parikh/agentmoney",
+        "agentmoney-mcp"
+      ]
+    }
+  }
+}
 ```
 
-### Estimate a session cost
+**Gemini CLI**: the extension brings the context and the MCP server.
 
 ```bash
-# 50 API calls, ~3K input / ~800 output each
-agentmoney estimate -m claude-sonnet-4-6 -c 50 --avg-input 3000 --avg-output 800
+gemini extensions install https://github.com/naman10parikh/agentmoney
 ```
 
-### See all model pricing
+**One skill** (3 in all, in [skills/](skills/)), in any agent that reads Agent Skills:
 
 ```bash
-agentmoney models
+gemini skills install https://github.com/naman10parikh/agentmoney --path skills/cost-investigation
+git clone --depth 1 https://github.com/naman10parikh/agentmoney /tmp/agentmoney && cp -r /tmp/agentmoney/skills/cost-investigation ~/.claude/skills/
 ```
 
-### Run the proxy (intercept real API calls)
+**The command line:**
 
 ```bash
-# Start the proxy on port 8999
-agentmoney proxy --port 8999 --alert 5.00
+npx -y -p github:naman10parikh/agentmoney agentmoney --help
+```
 
-# Then point your API client at the proxy:
+</details>
+
+Codex, Cursor, OpenCode, GitHub Copilot and other agents read [AGENTS.md](AGENTS.md); Claude Code reads [CLAUDE.md](CLAUDE.md) and Gemini CLI reads [GEMINI.md](GEMINI.md), which import it. [llms.txt](llms.txt) maps every surface for agents that read first.
+<!-- fleet:use:end -->
+
+## Quick start
+
+You need Node 18 or newer (`sandbox-run` needs Node 20). `calc`, `estimate`, `models` and `demo` need nothing else
+and never touch the network.
+
+```bash
+# Run it straight from GitHub, nothing installed: price 8 sample calls and see the breakdown
+npx -y -p github:naman10parikh/agentmoney agentmoney demo
+
+# Or keep a copy: clone, build, and put the commands on your PATH
+git clone https://github.com/naman10parikh/agentmoney && cd agentmoney
+npm install && npm install -g .
+```
+
+Price a call or a session:
+
+```bash
+agentmoney calc -m claude-sonnet-4-6 -i 5000 -o 1000                    # one call: $0.030000
+agentmoney calc -m claude-sonnet-4-6 -i 5000 -o 1000 --cache-read 3000  # with prompt caching: $0.030900
+agentmoney estimate -m claude-sonnet-4-6 -c 50 --avg-input 3000 --avg-output 800   # 50 calls: $1.0500
+agentmoney models                                                       # every model and its rates
+```
+
+Track the calls your app really makes:
+
+```bash
+agentmoney proxy --port 8999 --alert 5.00        # warn when a session passes $5
 ANTHROPIC_BASE_URL=http://localhost:8999 your-app
-
-# View live dashboard at http://localhost:8999/dashboard
-# View cost JSON at http://localhost:8999/costs
+# live dashboard: http://localhost:8999/dashboard   cost JSON: http://localhost:8999/costs
 ```
 
-### Fetch real Anthropic usage
+Read what Anthropic recorded. This needs an Admin API key (it starts with `sk-ant-admin`); workspace API keys
+cannot read usage.
 
 ```bash
-# Last 7 days
-agentmoney usage
-
-# Last 30 days, JSON output
+export ANTHROPIC_ADMIN_KEY=...
+agentmoney usage                    # the last 7 days, today included
 agentmoney usage --days 30 --json
 ```
 
-### Run a demo simulation
+### Example output
 
-```bash
+`agentmoney demo` prices 8 sample calls with a $0.05 session alert, so it also shows the alert firing:
+
+```
 agentmoney demo
+
+Simulating 8 API calls...
+
+.[agentmoney] WARNING: Session cost $0.0549 exceeded $0.05 threshold
+.[agentmoney] WARNING: Session cost $0.0584 exceeded $0.05 threshold
+...
+agentmoney summary
+──────────────────────────────────────────────────
+
+  Total cost:      $0.2812
+  Total calls:     8
+  Sessions:        1
+
+  By provider:
+    anthropic       $0.2702  (7 calls)
+    openai          $0.0110  (1 calls)
+
+  By model:
+    claude-sonnet-4-6                 $0.1998  (4 calls, 35.8K tokens)
+    claude-haiku-4-5                $0.005400  (2 calls, 3.0K tokens)
+    claude-opus-4-6                   $0.0650  (1 calls, 5.8K tokens)
+    gpt-4o                            $0.0110  (1 calls, 2.6K tokens)
+
+  Session demo: $0.2812 (8 calls)
+
+Reports saved: .agentmoney/report-YYYY-MM-DD.json, .agentmoney/report-YYYY-MM-DD.md
 ```
 
-## Example Output
+## How it works
+
+| Mode | What happens |
+| --- | --- |
+| `calc`, `estimate`, `models` | Pure math: model and tokens in, cost out, from the rate table in `src/pricing.ts`. No network. |
+| `proxy` | An Express server forwards every request to the target, reads the `usage` block of each JSON response (Anthropic's or OpenAI's, told apart by its fields), prices it, logs it and serves a dashboard. |
+| `usage` | Reads `GET /v1/organizations/usage_report/messages` (daily, grouped by model, every page) and prices the tokens with the same engine. A one-hour cache write costs twice the input rate; web search and code execution charges are not included. |
+| `sandbox-run` | Prices a call log you did not write inside an E2B microVM, with a program generated from the same rate table, and checks the total against the host. Needs `E2B_API_KEY`. |
+| MCP `cost_query` | Any coding agent prices a call by asking the `agentmoney-mcp` server. |
+
+### The proxy
 
 ```
-  agentmoney demo
-
-  Simulating 8 API calls...
-
-  ........
-
-  agentmoney summary
-  ──────────────────────────────────────────────────
-
-    Total cost:      $0.1842
-    Total calls:     8
-    Sessions:        1
-
-    By provider:
-      anthropic       $0.1732  (7 calls)
-      openai          $0.0110  (1 calls)
-
-    By model:
-      claude-sonnet-4-6              $0.1041  (4 calls, 37.8K tokens)
-      claude-opus-4-6                $0.0750  (1 calls, 5.8K tokens)
-      claude-haiku-4-5               $0.0027  (2 calls, 3.0K tokens)
-      gpt-4o                         $0.0110  (1 calls, 2.6K tokens)
-```
-
-## Commands
-
-| Command               | Description                                            |
-| --------------------- | ------------------------------------------------------ |
-| `agentmoney`          | Show quick start guide and available commands          |
-| `agentmoney demo`     | Simulate 8 API calls and see the cost breakdown        |
-| `agentmoney calc`     | Calculate cost for a single API call                   |
-| `agentmoney estimate` | Estimate cost for a multi-call session                 |
-| `agentmoney models`   | List all supported models and pricing                  |
-| `agentmoney proxy`    | Start a local proxy with web dashboard + cost tracking |
-| `agentmoney usage`    | Fetch real usage data from the Anthropic API           |
-
-## Proxy Mode
-
-The proxy sits between your application and the AI API, intercepting responses to extract token usage and calculate costs in real-time.
-
-```
-Your App → agentmoney proxy (localhost:8999) → api.anthropic.com
+Your app → agentmoney proxy (localhost:8999) → api.anthropic.com
                 ↓
-          Cost tracking
-          Web dashboard (Chart.js)
-          JSONL call log
-          Session reports
+          cost tracking per model, provider and session
+          web dashboard (Chart.js)
+          .agentmoney/calls.jsonl
+          daily reports
 ```
 
-### Proxy Endpoints
+| Path | What it returns |
+| --- | --- |
+| `GET /dashboard` | the web dashboard: cost per session per day, the hourly trend and the split by model |
+| `GET /health` | proxy status, total cost and call count (JSON) |
+| `GET /costs` | the full breakdown by model, provider and session (JSON) |
+| `* /*` | every other request, forwarded to the target |
 
-| Path             | Description                                                                             |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| `GET /dashboard` | Web dashboard with Chart.js charts (cost per agent/day, model breakdown, hourly trends) |
-| `GET /health`    | Proxy status + total cost (JSON)                                                        |
-| `GET /costs`     | Full cost breakdown (JSON API)                                                          |
-| `* /*`           | All other requests proxied to the target                                                |
+`--alert <usd>` prints a warning each time a session's cost passes the threshold. Stop the proxy with Ctrl+C and it
+prints a summary and writes the day's reports.
 
-### Alert Thresholds
+### Reports
+
+agentmoney writes to `.agentmoney/` in the folder it runs in:
+
+- `calls.jsonl`: every call the proxy saw, one JSON line each (model, tokens, cost, duration, endpoint, session)
+- `report-YYYY-MM-DD.json`: the day's cost report as data
+- `report-YYYY-MM-DD.md`: the same report in Markdown, ready to share
+
+### Commands
+
+| Command | What it does |
+| --- | --- |
+| `agentmoney` | show the commands and a quick start |
+| `agentmoney demo` | price 8 sample calls and write a report |
+| `agentmoney calc` | price one call |
+| `agentmoney estimate` | price a session of similar calls |
+| `agentmoney models` | list every model and its rates |
+| `agentmoney proxy` | start the cost-tracking proxy and its dashboard |
+| `agentmoney usage` | read real usage from the Anthropic Usage API |
+| `agentmoney sandbox-run` | price an untrusted call log inside an E2B microVM |
+| `agentmoney memory-search` | BM25 search over the memory and docs of the folder you run it in |
+
+### Options and settings
+
+| Flag or variable | Default | What it does |
+| --- | --- | --- |
+| `-m, --model <id>` | required | the model, for `calc` and `estimate` |
+| `-i, --input` · `-o, --output` | required | input and output tokens, for `calc` |
+| `--cache-read <n>` · `--cache-write <n>` | 0 | cache tokens, for `calc` |
+| `-c, --calls <n>` · `--avg-input` · `--avg-output` | required, 2000, 500 | calls and tokens per call, for `estimate` |
+| `--port <n>` | `8999` | the proxy's port |
+| `--target <url>` | `https://api.anthropic.com` | where the proxy forwards requests |
+| `--alert <usd>` | none | warn when a session's cost passes this |
+| `--days <n>` | 7 | days to read, for `usage` |
+| `--json` | off | JSON output (`calc`, `models`, `usage`, `sandbox-run`, `memory-search`) |
+| `ANTHROPIC_ADMIN_KEY` | none | the Admin API key `usage` sends (an `sk-ant-admin` key in `ANTHROPIC_API_KEY` also works) |
+| `ANTHROPIC_BASE_URL` | `https://api.anthropic.com` | where `usage` reads from |
+| `E2B_API_KEY` | none | the key `sandbox-run` boots a microVM with |
+
+### Tests and evals
 
 ```bash
-# Warn when session cost exceeds $5
-agentmoney proxy --alert 5.00
+npm install && npm run build
+npm test          # vitest: pricing, tracker, the proxy round trip, the Usage API read, the sandbox program
+npm run eval      # every surface, then 13 golden tasks against the built CLI, MCP server and hook, pass^3
 ```
 
-## Supported Models & Pricing
+No test or eval calls a real API: `eval/stub-usage.mjs` stands in for the Usage API. CI runs both on every push and
+pull request. The most useful contributions are fresh rates (follow
+[skills/add-model-pricing](skills/add-model-pricing/SKILL.md)), new providers such as Mistral, Cohere or DeepSeek,
+historical trends and budget limits.
 
-Pricing is current as of March 2026. Fuzzy model name matching handles date suffixes (`claude-sonnet-4-6-20260301`) and provider prefixes (`anthropic/claude-sonnet-4-6`). Unknown models default to Sonnet-tier pricing ($3/$15).
+## Supported models and pricing
+
+USD per million tokens, as of March 2026, from each provider's pricing page. Names match exactly, then by prefix
+(a date suffix such as `claude-sonnet-4-6-20260301`), then by containment (a provider prefix such as
+`anthropic/claude-sonnet-4-6`). An unknown model is estimated at $3 in and $15 out. Where a provider publishes no
+cache rate (a dash below), cache tokens are charged at the input rate. `agentmoney models` prints the same table, and
+the nightly loop flags the rates for a check when they are more than 90 days old.
 
 ### Anthropic
 
-| Model             | Input/MTok | Output/MTok | Cache Read/MTok | Cache Write/MTok |
-| ----------------- | ---------- | ----------- | --------------- | ---------------- |
-| claude-opus-4-6   | $5.00      | $25.00      | $0.50           | $6.25            |
-| claude-opus-4-5   | $5.00      | $25.00      | $0.50           | $6.25            |
-| claude-sonnet-4-6 | $3.00      | $15.00      | $0.30           | $3.75            |
-| claude-sonnet-4-5 | $3.00      | $15.00      | $0.30           | $3.75            |
-| claude-haiku-4-5  | $1.00      | $5.00       | $0.10           | $1.25            |
-| claude-opus-4-1   | $15.00     | $75.00      | $1.50           | $18.75           |
-| claude-3-5-haiku  | $0.80      | $4.00       | $0.08           | $1.00            |
-| claude-3-haiku    | $0.25      | $1.25       | $0.03           | $0.30            |
+| Model | Input | Output | Cache read | Cache write |
+| --- | --- | --- | --- | --- |
+| claude-opus-4-6 | $5.00 | $25.00 | $0.50 | $6.25 |
+| claude-sonnet-4-6 | $3.00 | $15.00 | $0.30 | $3.75 |
+| claude-opus-4-5 | $5.00 | $25.00 | $0.50 | $6.25 |
+| claude-sonnet-4-5 | $3.00 | $15.00 | $0.30 | $3.75 |
+| claude-haiku-4-5 | $1.00 | $5.00 | $0.10 | $1.25 |
+| claude-opus-4-1 | $15.00 | $75.00 | $1.50 | $18.75 |
+| claude-opus-4 | $15.00 | $75.00 | $1.50 | $18.75 |
+| claude-sonnet-4 | $3.00 | $15.00 | $0.30 | $3.75 |
+| claude-3-5-sonnet | $3.00 | $15.00 | $0.30 | $3.75 |
+| claude-3-5-haiku | $0.80 | $4.00 | $0.08 | $1.00 |
+| claude-3-opus | $15.00 | $75.00 | $1.50 | $18.75 |
+| claude-3-haiku | $0.25 | $1.25 | $0.03 | $0.30 |
 
 ### OpenAI
 
-| Model        | Input/MTok | Output/MTok | Cache Read/MTok |
-| ------------ | ---------- | ----------- | --------------- |
-| gpt-4.1      | $2.00      | $8.00       | $0.50           |
-| gpt-4.1-mini | $0.40      | $1.60       | $0.10           |
-| gpt-4.1-nano | $0.10      | $0.40       | $0.025          |
-| gpt-4o       | $2.50      | $10.00      | $1.25           |
-| gpt-4o-mini  | $0.15      | $0.60       | $0.075          |
-| o3           | $2.00      | $8.00       | $0.50           |
-| o4-mini      | $1.10      | $4.40       | $0.275          |
-| o1           | $15.00     | $60.00      | —               |
+| Model | Input | Output | Cache read |
+| --- | --- | --- | --- |
+| gpt-4.1 | $2.00 | $8.00 | $0.50 |
+| gpt-4.1-mini | $0.40 | $1.60 | $0.10 |
+| gpt-4.1-nano | $0.10 | $0.40 | $0.025 |
+| gpt-4o | $2.50 | $10.00 | $1.25 |
+| gpt-4o-mini | $0.15 | $0.60 | $0.075 |
+| gpt-4-turbo | $10.00 | $30.00 | - |
+| gpt-4 | $30.00 | $60.00 | - |
+| o3 | $2.00 | $8.00 | $0.50 |
+| o4-mini | $1.10 | $4.40 | $0.275 |
+| o1 | $15.00 | $60.00 | - |
+| o1-mini | $3.00 | $12.00 | - |
+| o3-mini | $1.10 | $4.40 | - |
 
 ### Google
 
-| Model            | Input/MTok | Output/MTok |
-| ---------------- | ---------- | ----------- |
-| gemini-2.0-flash | $0.10      | $0.40       |
-| gemini-2.0-pro   | $1.25      | $5.00       |
-| gemini-1.5-flash | $0.075     | $0.30       |
+| Model | Input | Output |
+| --- | --- | --- |
+| gemini-2.0-flash | $0.10 | $0.40 |
+| gemini-2.0-pro | $1.25 | $5.00 |
+| gemini-1.5-pro | $1.25 | $5.00 |
+| gemini-1.5-flash | $0.075 | $0.30 |
 
-## Reports
+<!-- fleet:anatomy:start -->
+## What it is made of
 
-agentmoney saves reports to `.agentmoney/`:
+Every project in this fleet is graded on the same 11 harness components and on self-improvement. Each mark is backed by a file you can open.
 
-- `calls.jsonl` — Every API call as a JSON line (append-only log)
-- `report-YYYY-MM-DD.json` — Daily cost report (structured data)
-- `report-YYYY-MM-DD.md` — Daily cost report (markdown, shareable)
+| Component | Grade | Where |
+| --- | --- | --- |
+| Identity | ✅ | identity/SOUL.md:1 (Ledger; SOUL claims fixed, BRAND, HEARTBEAT and bootstrap MEMORY rewritten, no template slots) |
+| Memory | ✅ | memory/MEMORY.md:1 (about 600 tokens) + BM25 index src/memory-search.ts:40 (agentmoney memory-search) + memory/LEARNINGS.md (7 entries, each with a rule) |
+| Skills | ✅ | skills/cost-investigation/SKILL.md:1, skills/add-model-pricing/SKILL.md:1, skills/isolate-untrusted-pricing/SKILL.md:1 (moved from .claude/skills, updated to the fixed code) |
+| Tools/CLIs | ✅ | package.json:9 (bins agentmoney, agentmoney-mcp; prepare builds on install); src/index.ts:27 (--version); 8 commands |
+| Hooks | ✅ | .claude/settings.json:4 (PreToolUse dangerous-command and secret guards) + hooks/hooks.json:3 (plugin SessionStart spend summary, hooks/spend-summary.mjs) |
+| Sub-agents | ✅ | .claude/agents/cost-analyst.md:1, .claude/agents/pricing-curator.md:1 (bundled in .claude-plugin/plugin.json) |
+| MCPs | ✅ | src/mcp-server.ts:44 (cost_query; answers the client's protocol version; bin agentmoney-mcp) + .mcp.json:3 (its own server through npx, nothing else) |
+| Dispatch | ✅ | .github/workflows/cost-watch.yml:23 (daily: prices a session with the product, scripts/cost-watch.mjs routes on a budget gate) + .github/workflows/improve.yml:10 (nightly loop) |
+| Evals | ✅ | eval/run.sh:1 (surfaces 43, golden 13 tasks pass^3, offline, Usage API stand-in) gating CI .github/workflows/ci.yml:35 |
+| Observability | ✅ | src/logger.ts:13 (every proxied call to .agentmoney/calls.jsonl with tokens, cost, duration) + proxy /costs and /dashboard (src/proxy.ts) + daily reports |
+| Sandbox/Infra | ✅ | src/sandbox-runner.ts:63 (E2B microVM) + src/sandbox-pricer.ts:31 (the in-sandbox program, generated from the host rate table) |
+| Self-improvement | ✅ | dsip.json:1 (L2) + .github/workflows/improve.yml:10 (nightly) + scripts/improve.mjs (evals, docs and skill coverage, memory, rate freshness, README drift) |
 
-## Configuration
+✅ real and tested · 🟡 partial, with the reason in the row · ❌ absent
+<!-- fleet:anatomy:end -->
 
-| Flag               | Default                     | Description                               |
-| ------------------ | --------------------------- | ----------------------------------------- |
-| `--port <n>`       | `8999`                      | Proxy port                                |
-| `--target <url>`   | `https://api.anthropic.com` | Target API URL                            |
-| `--alert <amount>` | none                        | Warn when session cost exceeds this (USD) |
-| `--json`           | false                       | Output as JSON (calc, models, usage)      |
-| `--model <id>`     | required                    | Model name for calc/estimate              |
-| `--days <n>`       | 7                           | Days to fetch for usage command           |
+<!-- fleet:footer:start -->
+## How it improves itself
 
-## Anthropic Usage API
+It carries its own evals and a self-improvement contract, [`dsip.json`](dsip.json), which says what it may change and how a change is judged. A scheduled job runs its evals and proposes fixes. A person makes every change. Lessons it learns are kept as rules in its memory files.
 
-Fetch your real API spending directly from Anthropic (no proxy needed):
+## Part of a fleet
 
-```bash
-agentmoney usage --days 30
-```
+One of the projects by [Naman Parikh](https://github.com/naman10parikh). Each owns one part of an agent's harness, or of the product around an agent, and all of them follow one standard.
 
-Calls the Anthropic `/v1/usage` endpoint and calculates costs using the same pricing engine. Requires `ANTHROPIC_API_KEY` with admin-level permissions.
+Siblings: [agentdial](https://github.com/naman10parikh/agentdial) (identity) · [wikimem](https://github.com/naman10parikh/wikimem) (memory) · [skillsmith](https://github.com/naman10parikh/skillsmith) (skills) · [agent-booster](https://github.com/naman10parikh/agent-booster) (tools / CLIs) · [armory](https://github.com/naman10parikh/armory) (MCPs and the component registry) · [agentgrid](https://github.com/naman10parikh/agentgrid) (dispatch) · [agentswarm](https://github.com/naman10parikh/agentswarm) (dispatch) · [agentbench](https://github.com/naman10parikh/agentbench) (evals) · [claude-harness](https://github.com/naman10parikh/claude-harness) (the whole harness, as a template).
 
-## How It Works
+## Contributing and security
 
-1. **Proxy mode:** Express server intercepts API responses, extracts the `usage` block (input_tokens, output_tokens, cache tokens), calculates cost using built-in pricing tables, logs to JSONL, serves web dashboard
-2. **Calc mode:** Pure math — model + tokens = cost. No API calls needed.
-3. **Estimate mode:** Calc x number of calls. Quick session budgeting.
-4. **Usage mode:** Fetches real spending from the Anthropic API.
-5. **Pricing engine:** Fuzzy model name matching, supports 25+ models across 3 providers. Updated March 2026.
+Read [CONTRIBUTING.md](CONTRIBUTING.md). AI-assisted pull requests are welcome. Report a vulnerability privately, as [SECURITY.md](SECURITY.md) explains.
 
-## Contributing
+## Star history
 
-PRs welcome. Especially:
-
-- Updated model pricing
-- New provider support (Mistral, Cohere, DeepSeek, etc.)
-- Better TUI dashboard (blessed/ink)
-- Historical cost tracking and trends
-- Budget limits and alerts
+[![Star history chart](https://api.star-history.com/svg?repos=naman10parikh/agentmoney&type=Date)](https://star-history.com/#naman10parikh/agentmoney&Date)
+<!-- fleet:footer:end -->
 
 ## License
 
-MIT
+MIT, see [LICENSE](LICENSE).
