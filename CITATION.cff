@@ -1,0 +1,12 @@
+cff-version: 1.2.0
+message: If you use this software, please cite it as below.
+title: "AgentMoney: Know what your AI costs: pricing and spend for Claude, GPT and Gemini."
+type: software
+authors:
+  - family-names: Parikh
+    given-names: Naman
+repository-code: "https://github.com/naman10parikh/agentmoney"
+license: MIT
+version: "1.0.0"
+abstract: "Know what your AI costs: pricing and spend for Claude, GPT and Gemini."
+keywords: ["agent-native", "llm-cost", "llm-pricing", "observability"]
