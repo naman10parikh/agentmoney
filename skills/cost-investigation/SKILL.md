@@ -28,7 +28,9 @@ encoding it stops every cost post-mortem from being improvised.
 3. **Quantify cache savings.** For the top sessions, compare `cacheReadTokens` vs raw
    input tokens. Use `node dist/index.js calc -m <model> -i <in> -o <out> --cache-read <cr>`
    to compute the with-cache cost, then again with `--cache-read 0`, and report the
-   delta as the realized (or missed) savings.
+   delta as the realized (or missed) savings. From another agent, the MCP tool `cost_query`
+   (server `agentmoney-mcp`) does the same math: pass `model`, `input_tokens`, `output_tokens`
+   and `cache_read_tokens`.
 4. **Recall prior incidents.** Run `node dist/index.js memory-search "cost spike caching session"`
    to surface any past LEARNINGS about the same failure mode before re-deriving it.
 5. **Recommend a guardrail.** If the spike is repeatable, recommend a budget alert:
