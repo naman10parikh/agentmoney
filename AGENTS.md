@@ -70,8 +70,8 @@ src/                  # The product: a Node CLI (TypeScript, ESM)
   index.ts            #   commander CLI entry: calc, estimate, models, proxy, usage, demo, sandbox-run, memory-search
   pricing.ts          #   the rate table (Claude, OpenAI, Gemini) and fuzzy model matching
   tracker.ts          #   accumulates spend per model, provider and session; session alerts
-  proxy.ts            #   Express proxy that reads each response's usage block
-  dashboard.ts        #   the proxy's web dashboard (Chart.js)
+  proxy.ts            #   Express proxy that reads each response's usage block, streamed replies included
+  dashboard.ts        #   the proxy's web dashboard (Chart.js from a CDN: the charts need the internet)
   reporter.ts         #   terminal dashboard and summary
   logger.ts           #   writes calls.jsonl and the daily JSON and Markdown reports to .agentmoney/
   anthropic-usage.ts  #   reads the Anthropic Usage API and prices it

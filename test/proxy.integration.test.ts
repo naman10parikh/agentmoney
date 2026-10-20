@@ -112,6 +112,23 @@ const MOCK_RESPONSE = {
   },
 };
 
+// ── mock streamed replies (server-sent events) ──────────────────────────────
+
+// Anthropic: the model and input tokens come in message_start, the final output count in message_delta.
+const ANTHROPIC_STREAM = [
+  `event: message_start\ndata: {"type":"message_start","message":{"id":"msg_stream","type":"message","role":"assistant","model":"${MOCK_RESPONSE.model}","content":[],"usage":{"input_tokens":20,"cache_creation_input_tokens":0,"cache_read_input_tokens":0,"output_tokens":1}}}`,
+  `event: content_block_delta\ndata: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"Hi"}}`,
+  `event: message_delta\ndata: {"type":"message_delta","delta":{"stop_reason":"end_turn"},"usage":{"output_tokens":7}}`,
+  `event: message_stop\ndata: {"type":"message_stop"}`,
+].join("\n\n") + "\n\n";
+
+// OpenAI: chunks carry "usage": null, then a last chunk carries the usage (stream_options.include_usage), then [DONE].
+const OPENAI_STREAM = [
+  `data: {"object":"chat.completion.chunk","model":"stream-test-model","choices":[{"index":0,"delta":{"content":"Hi"}}],"usage":null}`,
+  `data: {"object":"chat.completion.chunk","model":"stream-test-model","choices":[],"usage":{"prompt_tokens":12,"completion_tokens":4,"total_tokens":16}}`,
+  `data: [DONE]`,
+].join("\n\n") + "\n\n";
+
 // ── test suite ───────────────────────────────────────────────────────────────
 
 describe("proxy integration — real round-trip", () => {
@@ -123,10 +140,19 @@ describe("proxy integration — real round-trip", () => {
 
   // Stand up both servers once for the entire suite
   it("setup: starts upstream mock and proxy", async () => {
-    // 1. Mock upstream — always returns MOCK_RESPONSE
-    const upstream = await startServer((_req, res) => {
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify(MOCK_RESPONSE));
+    // 1. Mock upstream — returns MOCK_RESPONSE, or a streamed reply when the request asks for one
+    const upstream = await startServer((req, res) => {
+      let raw = "";
+      req.on("data", (chunk: Buffer) => { raw += chunk.toString(); });
+      req.on("end", () => {
+        if ((JSON.parse(raw || "{}") as { stream?: boolean }).stream) {
+          res.writeHead(200, { "Content-Type": "text/event-stream" });
+          res.end(req.url === "/v1/chat/completions" ? OPENAI_STREAM : ANTHROPIC_STREAM);
+          return;
+        }
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify(MOCK_RESPONSE));
+      });
     });
     upstreamUrl = upstream.url;
     closeUpstream = upstream.close;
@@ -218,6 +244,47 @@ describe("proxy integration — real round-trip", () => {
 
     expect(tracker.getTotalCalls()).toBe(3);
     expect(tracker.getCurrentSession()!.totalInputTokens).toBe(30);
+  });
+
+  it("prices a streamed Anthropic reply from its message_start and message_delta events", async () => {
+    const { statusCode, body } = await httpPost(`${proxyUrl}/v1/messages`, {
+      model: MOCK_RESPONSE.model,
+      max_tokens: 16,
+      stream: true,
+      messages: [{ role: "user", content: "stream" }],
+    });
+
+    expect(statusCode).toBe(200);
+    expect(body).toBe(ANTHROPIC_STREAM); // the events reach the app unchanged
+    expect(tracker.getTotalCalls()).toBe(4);
+    const call = tracker.getCurrentSession()!.calls.at(-1)!;
+    expect(call.model).toBe(MOCK_RESPONSE.model);
+    expect(call.inputTokens).toBe(20);
+    expect(call.outputTokens).toBe(7); // the final count, not message_start's 1
+    expect(call.totalCost).toBeGreaterThan(0);
+  });
+
+  it("prices a streamed OpenAI reply from its last usage chunk", async () => {
+    await httpPost(`${proxyUrl}/v1/chat/completions`, {
+      model: "stream-test-model",
+      stream: true,
+      stream_options: { include_usage: true },
+      messages: [{ role: "user", content: "stream" }],
+    });
+
+    expect(tracker.getTotalCalls()).toBe(5);
+    const call = tracker.getCurrentSession()!.calls.at(-1)!;
+    expect(call.model).toBe("stream-test-model");
+    expect(call.inputTokens).toBe(12);
+    expect(call.outputTokens).toBe(4);
+  });
+
+  it("GET /dashboard refreshes before it draws the charts, and says offline that they need the internet", async () => {
+    const html = await httpGet(`${proxyUrl}/dashboard`);
+    expect(html).toContain("cdn.jsdelivr.net/npm/chart.js");
+    expect(html).toContain("The charts need the internet");
+    // The reload is set before any chart code, so a page whose Chart.js did not load still refreshes.
+    expect(html.indexOf("location.reload()")).toBeLessThan(html.indexOf("new Chart("));
   });
 
   // Tear down after all tests finish

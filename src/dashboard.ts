@@ -213,6 +213,15 @@ export function renderDashboard(tracker: CostTracker): string {
   <p class="refresh">Auto-refreshes every 10 seconds</p>
 
   <script>
+    // Auto-refresh first, so it runs even when the charts cannot draw. The charts need the internet: Chart.js
+    // loads from the jsDelivr CDN. Offline, the page says so in their place.
+    setTimeout(() => location.reload(), 10000);
+    if (typeof Chart === 'undefined') {
+      document.querySelector('.charts').innerHTML =
+        '<p class="refresh" style="grid-column: 1 / -1;">The charts need the internet: they load Chart.js from cdn.jsdelivr.net. The totals and the call table still work offline.</p>';
+    }
+  </script>
+  <script>
     const chartDefaults = {
       color: '#a1a1aa',
       borderColor: '#27272a',
@@ -291,9 +300,6 @@ export function renderDashboard(tracker: CostTracker): string {
         }
       }
     });
-
-    // Auto-refresh
-    setTimeout(() => location.reload(), 10000);
   </script>
 </body>
 </html>`;

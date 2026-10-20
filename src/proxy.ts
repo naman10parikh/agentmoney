@@ -48,6 +48,43 @@ function parseOpenAIResponse(body: Record<string, unknown>): {
   };
 }
 
+// Read a usage block by its shape, not by the target or the auth header: Anthropic reports input_tokens, OpenAI
+// prompt_tokens. A gateway or a Bearer token then still prices correctly.
+function parseUsage(body: Record<string, unknown>): ReturnType<typeof parseAnthropicResponse> {
+  const block = body.usage as Record<string, unknown> | undefined;
+  return block && "input_tokens" in block
+    ? parseAnthropicResponse(body)
+    : parseOpenAIResponse(body);
+}
+
+// A streamed reply (server-sent events) carries its usage in its events. Anthropic sends the model and the input
+// tokens in message_start, then the final output count in message_delta. OpenAI sends a last chunk with a usage
+// block when the request sets stream_options.include_usage. With no usage in any event, the call is not priced.
+function parseStreamedResponse(text: string): ReturnType<typeof parseAnthropicResponse> {
+  let model: unknown;
+  let usage: Record<string, unknown> | undefined;
+  for (const line of text.split("\n")) {
+    if (!line.startsWith("data:")) continue;
+    let event: Record<string, unknown>;
+    try {
+      event = JSON.parse(line.slice(5)) as Record<string, unknown>;
+    } catch {
+      continue; // "[DONE]" and anything else that is not JSON
+    }
+    // Anthropic's message_start nests the message; OpenAI's Responses API nests the response.
+    const inner = (event.message ?? event.response) as Record<string, unknown> | undefined;
+    if (inner?.usage) {
+      model = inner.model ?? model;
+      usage = { ...(inner.usage as Record<string, unknown>) };
+    }
+    if (event.usage) {
+      model = event.model ?? model;
+      usage = { ...usage, ...(event.usage as Record<string, unknown>) };
+    }
+  }
+  return usage ? parseUsage({ model, usage }) : null;
+}
+
 export function createProxy(
   tracker: CostTracker,
   targetUrl: string,
@@ -122,14 +159,10 @@ export function createProxy(
 
       // Try to parse and record usage
       try {
-        const parsed = JSON.parse(responseBody) as Record<string, unknown>;
-        // Read the usage block by its shape, not by the target or the auth header: Anthropic reports
-        // input_tokens, OpenAI prompt_tokens. A gateway or a Bearer token then still prices correctly.
-        const block = parsed.usage as Record<string, unknown> | undefined;
-        const usage =
-          block && "input_tokens" in block
-            ? parseAnthropicResponse(parsed)
-            : parseOpenAIResponse(parsed);
+        const streamed = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
+        const usage = streamed
+          ? parseStreamedResponse(responseBody)
+          : parseUsage(JSON.parse(responseBody) as Record<string, unknown>);
 
         if (usage) {
           tracker.recordCall({

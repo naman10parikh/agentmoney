@@ -168,7 +168,7 @@ Reports saved: .agentmoney/report-YYYY-MM-DD.json, .agentmoney/report-YYYY-MM-DD
 | Mode | What happens |
 | --- | --- |
 | `calc`, `estimate`, `models` | Pure math: model and tokens in, cost out, from the rate table in `src/pricing.ts`. No network. |
-| `proxy` | An Express server forwards every request to the target, reads the `usage` block of each JSON response (Anthropic's or OpenAI's, told apart by its fields), prices it, logs it and serves a dashboard. |
+| `proxy` | An Express server forwards every request to the target, reads the `usage` block of each JSON response or the usage events of a streamed one (Anthropic's or OpenAI's, told apart by their fields), prices it, logs it and serves a dashboard. |
 | `usage` | Reads `GET /v1/organizations/usage_report/messages` (daily, grouped by model, every page) and prices the tokens with the same engine. A one-hour cache write costs twice the input rate; web search and code execution charges are not included. |
 | `sandbox-run` | Prices a call log you did not write inside an E2B microVM, with a program generated from the same rate table, and checks the total against the host. Needs `E2B_API_KEY`. |
 | MCP `cost_query` | Any coding agent prices a call by asking the `agentmoney-mcp` server. |
@@ -186,10 +186,14 @@ Your app → agentmoney proxy (localhost:8999) → api.anthropic.com
 
 | Path | What it returns |
 | --- | --- |
-| `GET /dashboard` | the web dashboard: cost per session per day, the hourly trend and the split by model |
+| `GET /dashboard` | the web dashboard: cost per session per day, the hourly trend and the split by model. The charts load Chart.js from the jsDelivr CDN, so they need the internet. Offline, the page says so and still shows the totals and the calls. |
 | `GET /health` | proxy status, total cost and call count (JSON) |
 | `GET /costs` | the full breakdown by model, provider and session (JSON) |
 | `* /*` | every other request, forwarded to the target |
+
+The proxy reads each whole reply before passing it on, so a streamed reply reaches your app all at once. It prices a
+streamed reply from its events: Anthropic's `message_start` and `message_delta`, or OpenAI's last chunk. An OpenAI
+stream carries usage only when the request sets `stream_options.include_usage`; without it, the call is not priced.
 
 `--alert <usd>` prints a warning each time a session's cost passes the threshold. Stop the proxy with Ctrl+C and it
 prints a summary and writes the day's reports.

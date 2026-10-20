@@ -53,3 +53,11 @@ Every error → root cause → rule. Auto-compressed when >500 lines (memory-com
 - **Rule:** read the usage block by its shape (`input_tokens` is Anthropic's, `prompt_tokens` OpenAI's).
   `test/proxy.integration.test.ts` covers a Bearer call; run the CLI proxy once by hand after any change to it.
 
+
+## 2026-10-20 — Streamed replies were never priced
+
+- **What broke:** a reply sent as server-sent events failed `JSON.parse`, so the proxy recorded nothing for it. Every
+  streamed call cost $0 in the totals, the reports and the dashboard.
+- **Root cause:** the proxy read usage only from a JSON body, and a stream carries it in its events.
+- **Rule:** read a `text/event-stream` reply's events: Anthropic's `message_start` and `message_delta`, OpenAI's last
+  usage chunk. `test/proxy.integration.test.ts` streams both through the real proxy.
