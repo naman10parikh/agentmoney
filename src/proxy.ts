@@ -148,18 +148,36 @@ export function createProxy(
       }
 
       const upstream = await fetch(url, fetchOptions);
-      const responseBody = await upstream.text();
-      const durationMs = Date.now() - startTime;
+      const streamed = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
 
       // Forward response headers
       for (const [key, value] of upstream.headers.entries()) {
         if (key === "transfer-encoding" || key === "content-encoding") continue;
+        if (streamed && key === "content-length") continue;
         res.setHeader(key, value);
       }
 
+      // A streamed reply is passed on event by event as it arrives, and a copy is kept to price it at the end.
+      let responseBody = "";
+      if (streamed && upstream.body) {
+        res.status(upstream.status);
+        res.flushHeaders();
+        const reader = upstream.body.getReader();
+        const decoder = new TextDecoder();
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          responseBody += decoder.decode(value, { stream: true });
+          res.write(value);
+        }
+        responseBody += decoder.decode();
+      } else {
+        responseBody = await upstream.text();
+      }
+      const durationMs = Date.now() - startTime;
+
       // Try to parse and record usage
       try {
-        const streamed = (upstream.headers.get("content-type") ?? "").includes("text/event-stream");
         const usage = streamed
           ? parseStreamedResponse(responseBody)
           : parseUsage(JSON.parse(responseBody) as Record<string, unknown>);
@@ -175,11 +193,14 @@ export function createProxy(
         // Response isn't JSON or doesn't have usage — that's fine
       }
 
-      res.status(upstream.status).send(responseBody);
+      if (streamed && upstream.body) res.end();
+      else res.status(upstream.status).send(responseBody);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       console.warn(`[agentmoney] Proxy error: ${message}`);
-      res.status(502).json({ error: "Proxy error", details: message });
+      // A stream that fails part way has already sent its status, so it can only end.
+      if (res.headersSent) res.end();
+      else res.status(502).json({ error: "Proxy error", details: message });
     }
   });
 

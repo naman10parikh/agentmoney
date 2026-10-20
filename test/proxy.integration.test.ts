@@ -279,6 +279,48 @@ describe("proxy integration — real round-trip", () => {
     expect(call.outputTokens).toBe(4);
   });
 
+  it("passes a streamed reply on event by event, before the stream ends, and still prices it", async () => {
+    // This upstream sends message_start, then holds the rest until the app has read it, or 2 seconds pass.
+    let appReadFirst: () => void = () => {};
+    const firstRead = new Promise<void>((resolve) => { appReadFirst = resolve; });
+    const [head, ...rest] = ANTHROPIC_STREAM.split("\n\n").filter(Boolean);
+    let upstreamEnded = false;
+    let arrivedBeforeEnd = false;
+    const slow = await startServer((_req, res) => {
+      res.writeHead(200, { "Content-Type": "text/event-stream" });
+      res.write(`${head}\n\n`);
+      void Promise.race([firstRead, new Promise((resolve) => setTimeout(resolve, 2000))]).then(() => {
+        upstreamEnded = true;
+        res.end(rest.map((event) => `${event}\n\n`).join(""));
+      });
+    });
+    const own = new CostTracker();
+    own.startSession("streaming");
+    const proxy = await startServer(createProxy(own, slow.url, 0) as unknown as http.RequestListener);
+    const body = await new Promise<string>((resolve, reject) => {
+      const req = http.request(`${proxy.url}/v1/messages`, { method: "POST", headers: { "Content-Type": "application/json" } }, (res) => {
+        let data = "";
+        res.on("data", (chunk: Buffer) => {
+          data += chunk.toString();
+          if (data.includes("message_start")) {
+            arrivedBeforeEnd ||= !upstreamEnded;
+            appReadFirst();
+          }
+        });
+        res.on("end", () => resolve(data));
+      });
+      req.on("error", reject);
+      req.end(JSON.stringify({ model: MOCK_RESPONSE.model, stream: true }));
+    });
+    proxy.close();
+    slow.close();
+
+    expect(arrivedBeforeEnd).toBe(true);
+    expect(body).toBe(ANTHROPIC_STREAM);
+    expect(own.getTotalCalls()).toBe(1);
+    expect(own.getCurrentSession()!.calls[0]!.outputTokens).toBe(7);
+  });
+
   it("GET /dashboard refreshes before it draws the charts, and says offline that they need the internet", async () => {
     const html = await httpGet(`${proxyUrl}/dashboard`);
     expect(html).toContain("cdn.jsdelivr.net/npm/chart.js");

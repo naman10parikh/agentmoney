@@ -191,8 +191,8 @@ Your app → agentmoney proxy (localhost:8999) → api.anthropic.com
 | `GET /costs` | the full breakdown by model, provider and session (JSON) |
 | `* /*` | every other request, forwarded to the target |
 
-The proxy reads each whole reply before passing it on, so a streamed reply reaches your app all at once. It prices a
-streamed reply from its events: Anthropic's `message_start` and `message_delta`, or OpenAI's last chunk. An OpenAI
+The proxy passes a streamed reply on to your app event by event, as it arrives. It prices the reply from its events
+once the stream ends: Anthropic's `message_start` and `message_delta`, or OpenAI's last chunk. An OpenAI
 stream carries usage only when the request sets `stream_options.include_usage`; without it, the call is not priced.
 
 `--alert <usd>` prints a warning each time a session's cost passes the threshold. Stop the proxy with Ctrl+C and it
